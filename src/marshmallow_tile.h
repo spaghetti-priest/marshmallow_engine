@@ -1,13 +1,6 @@
 #ifndef MARSHMALLOW_TILE_H
 #define MARSHMALLOW_TILE_H
 
-// @Cleanup: this is just a V2s
-typedef struct TilemapPosition {
-   int x;
-   int y;
-   // int tile_z;
-} TilemapPosition;
-
 typedef struct Tile {
    V2S min;
    V2S max;

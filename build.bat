@@ -14,10 +14,10 @@ set SDL2_DIR=extern\\SDL2
 set COMPILER_FLAGS=/nologo /Zi /MD /utf-8
 set LINKER_FLAGS= /subsystem:console
 
-@set OUT_DIR=Debug
-@set OUT_EXE=Marshmallow
+@set OUT_DIR= Debug
+@set OUT_EXE= Marshmallow
 @set INCLUDES=/I%SDL2_DIR%\\include /I%EXTERN% /I%OPENAL_DIR%\\include
-@set SOURCES= %SRC_DIR%sdl_marshmallow.cpp %SRC_DIR%marshmallow.cpp
+@set SOURCES= %SRC_DIR%sdl_marshmallow.cpp
 
 @set SDL_LIBS=    /LIBPATH:%SDL2_DIR%\lib\x64 SDL2.lib SDL2main.lib
 @set OPENAL_LIBS= /LIBPATH:extern\\openal-soft\\build\\Release OpenAL32.lib

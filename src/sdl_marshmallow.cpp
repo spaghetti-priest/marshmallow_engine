@@ -46,6 +46,9 @@ typedef int                 b32x;
 typedef float               f32;
 typedef double              f64;
 
+#include "marshmallow_vulkan.h"
+#include "marshmallow_vulkan.cpp"
+
 #define function static
 #define global_variable static
 
@@ -67,11 +70,6 @@ typedef struct Table {
    int key;
    void *value;
 } Table;
-
-typedef struct MarshFile {
-   void *contents;
-  u32 size;
-} MarshFile;
 
 struct Item {
    V2S index; // In this case it is the Tile grid position
@@ -122,10 +120,16 @@ struct Item {
 // }
 
 inline const char*
-strip_file_path (const char* s)
+strip_file_path (const char *s)
 {
-   const char* last = strrchr(s, '\\');
+   const char *last = " ";
+   if (strrchr(s, '\\') != nullptr) {
+      last = strrchr(s, '\\');
+   } else if (strrchr(s, '/') != nullptr) {
+      last = strrchr(s, '/');
+   }
    last += 1;
+
    return last;
 }
 
@@ -171,15 +175,17 @@ reserve_memory_block (size_t size)
    return memory;
 }
 
-#if 0
+#if 1
 function MarshFile
 debug_read_file (const char *filename)
 {
     MarshFile res = {};
     FILE *f = nullptr;
     f = fopen(filename, "rb");
+    const char *strip_name = strip_file_path(filename);
+
     if (!f) {
-        printf("[ERROR]: Failed to open file!\n");
+        printf("[ERROR]: Failed to open file: [%s]\n", strip_name);
         return res;
     }
 
@@ -215,7 +221,7 @@ debug_write_file (MarshFile *file, const char *filename)
 
     return 1;
 }
-
+/*
 function bool
 debug_list_all_directories(const char *dirname)
 {
@@ -228,7 +234,8 @@ debug_list_all_directories(const char *dirname)
     closedir(dir);
     return 1;
 }
-#endif
+*/
+#else
 
 function MarshFile
 debug_read_file (const char *filename)
@@ -330,7 +337,7 @@ debug_list_all_directories (const wchar_t *dirname)
 
    return 1;
 }
-
+#endif
 typedef struct Image {
    int         x;
    int         y;
@@ -365,7 +372,6 @@ load_image_in_pixels(const char *filename)
 function void
 SDL_swap_framebuffers (SDL_Context *context)
 {
-   #if 1
    SDL_UnlockSurface(context->surface);
 
    u32 mem_size = context->backbuffer->w * context->backbuffer->h * sizeof(u32);
@@ -373,14 +379,6 @@ SDL_swap_framebuffers (SDL_Context *context)
 
    SDL_LockSurface(context->surface);
    SDL_UpdateWindowSurface(context->window);
-   #else
-   SDL_RenderClear(context->renderer);
-   SDL_RenderCopy(context->renderer, context->texture, NULL, NULL);
-
-   // triggers the double buffers
-   // for multiple rendering
-   SDL_RenderPresent(context->renderer);
-   #endif
 }
 
 function inline u64
@@ -416,6 +414,7 @@ SDL_process_keyboard_and_mouse_input (ButtonState *input, int button_is_down)
    return;
 }
 
+// @Incomplete: Use an explicit string comparision or create a string lib
 function bool
 is_whitespace(char s)
 {
@@ -560,10 +559,12 @@ SDL_process_events (SDL_Context *context, GameInput *input)
             if (key_code.sym == 'd')
                printf("D pressed\n");
             if (key_code.sym == (SDLK_e)) {
-               if (input->editor_button_pressed) {
-                  input->editor_button_pressed = false;
-               } else {
-                 input->editor_button_pressed = true;
+               if(key_event.type == SDL_KEYDOWN) {
+                  if (input->editor_button_pressed) {
+                     input->editor_button_pressed = false;
+                  } else {
+                    input->editor_button_pressed = true;
+                  }
                }
             }
             if (key_code.sym == SDLK_ESCAPE)
@@ -579,11 +580,9 @@ SDL_process_events (SDL_Context *context, GameInput *input)
                if (mouse_button_event.button == SDL_BUTTON_LEFT) {
                   if (mouse_button_event.clicks == 1) {
                      input->left_button_pressed = true;
-                     // input->left.button_pressed = true;
                   } else if (mouse_button_event.clicks == 2) {
                      printf("left button double clicked\n");
                      input->left_button_double_pressed = true;
-                     // input->left.button_double_pressed = true;
                   }
                }
                if (mouse_button_event.button == SDL_BUTTON_RIGHT) {
@@ -593,10 +592,8 @@ SDL_process_events (SDL_Context *context, GameInput *input)
                if (mouse_button_event.button == SDL_BUTTON_LEFT) {
                   if (mouse_button_event.clicks == 1) {
                      input->left_button_pressed = false;
-                     // input->left.button_pressed = false;
                   } else if(mouse_button_event.clicks == 2) {
                      input->left_button_double_pressed = false;
-                     // input->left.button_double_pressed = false;
                   }
                }
                if (mouse_button_event.button == SDL_BUTTON_RIGHT) {
@@ -622,12 +619,11 @@ int main (int argc, char **argv)
      return -1;
    }
 
-   const char* glsl_version = "#version 150";
-
    // @Incomplete: Allow the user to move the window position using the menu bar in imgui. For now just keep the window border until futher removal
    // @TODO(Bug): When you resize the window, the framebuffer does not refresh / swap
    // @Bug: When the window is not in focus the window crashes
    SDL_WindowFlags window_flags = (SDL_WindowFlags)(//SDL_WINDOW_RESIZABLE   |
+                                                  SDL_WINDOW_VULKAN |
                                                   SDL_WINDOW_ALLOW_HIGHDPI);
 
    window = SDL_CreateWindow("Marshmallow\n",
@@ -638,20 +634,6 @@ int main (int argc, char **argv)
                         window_flags);
 
    surface = SDL_GetWindowSurface(window);
-
-#if 0
-   renderer = SDL_CreateRenderer(window, 0, SDL_RENDERER_SOFTWARE); // software acceleration
-   if(!renderer) {
-     printf("[ERROR]: %s\n", SDL_GetError());
-     return 0;
-   }
-
-   texture = SDL_CreateTextureFromSurface(renderer, surface);
-   if (!surface) {
-     printf("[ERROR]: %s\n", SDL_GetError());
-     return 0;
-   }
-#endif
 
    GameMemory game_memory              = {};
    game_memory.permanent_storage_size  = Megabytes(64);
@@ -709,6 +691,8 @@ int main (int argc, char **argv)
       }
    }
 
+   bool success = vulkan_init(window);
+
    // bool s = load_wav_file("C:\\marshmallow\\data\\searching_the_past.wav");
    while (context.running)
    {
@@ -745,15 +729,17 @@ int main (int argc, char **argv)
       input.mouse_pos.x = x;
       input.mouse_pos.y = y;
 
+      vk_draw_frame();
+
       if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) {
          SDL_Delay(10);
          continue;
       }
 
-      game_update_and_render(&game_memory, &input, &global_backbuffer);
+      // game_update_and_render(&game_memory, &input, &global_backbuffer);
 
-      SDL_swap_framebuffers(&context);
-      free(context.backbuffer->pixels);
+      // SDL_swap_framebuffers(&context);
+      // free(context.backbuffer->pixels);
 
       u64 fps_end_counter = SDL_get_performance_count();
       ++frame_counter;

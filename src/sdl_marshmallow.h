@@ -22,5 +22,14 @@ typedef struct _SDL_Context_ {
    bool            running;
 } SDL_Context;
 
+typedef struct MarshFile {
+  void *contents;
+  u32 size;
+} MarshFile;
+
+static MarshFile debug_read_file (const char *filename);
+static bool debug_write_file (MarshFile *file, const char *filename);
+static bool debug_list_all_directories(const char *dirname);
+
 #define SDL_MARSHMALLOW_H
 #endif

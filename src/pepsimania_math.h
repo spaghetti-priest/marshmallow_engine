@@ -53,7 +53,6 @@ union V2U {
 		u32 x, y;
 	};
 
-
 	u32 e[2];
 };
 
@@ -76,25 +75,25 @@ inline V2S operator-(V2S a, V2S b) 		{V2S r = {a.x - b.x, a.y - b.y}; return r;}
 inline V2S operator*(V2S a, V2S b) 		{V2S r = {a.x * b.x, a.y * b.y}; return r;}
 inline V2S operator*(V2S a, s32 b) 		{V2S r = {a.x * b, a.y * b}; 	 	return r;}
 inline V2S operator*(s32 a, V2S b) 		{V2S r = {a * b.x, a * b.y}; 	 	return r;}
-inline V2S operator/(V2S a, s32 b) 		{V2S r = (1.0f / b) * a;			return r;}
+inline V2S operator/(V2S a, s32 b) 		{V2S r = (1 / b) * a;				return r;}
 inline V2S operator/(s32 a, V2S b) 		{V2S r = {a / b.x, a / b.y}; 		return r;}
 inline V2S &operator*=(V2S a, V2S b) 	{a = a * b; 							return a;}
-inline V2S &operator/=(V2S &a, f32 b) 	{a = a / b; 							return a;}
+inline V2S &operator/=(V2S &a, s32 b) 	{a = a / b; 							return a;}
 inline s32 dot(V2S a, V2S b)				{s32 r = a.x * b.x + a.y * b.y; 	return r;}
 inline bool operator==(V2S a, V2S b) 	{bool r = ((a.x == b.x) && (a.y == b.y)); return r;}
 
 // Float v2
-inline V2 v2(float x, float y)			{V2 r = {x, y};						return r;}
+inline V2 v2(float x, float y) 		{V2 r = {x, y};						return r;}
 inline V2 operator+(V2 a, V2 b) 		{V2 r = {a.x + b.x, a.y + b.y}; 	return r;}
-inline V2 operator-(V2 a, V2 b) 		{V2 r = {a.x - b.x, a.y - b.y};		return r;}
+inline V2 operator-(V2 a, V2 b) 		{V2 r = {a.x - b.x, a.y - b.y};	return r;}
 inline V2 operator*(V2 a, V2 b) 		{V2 r = {a.x * b.x, a.y * b.y}; 	return r;}
-inline V2 operator*(V2 a, f32 b) 		{V2 r = {a.x * b, a.y * b}; 		return r;}
-inline V2 operator*(f32 a, V2 b) 		{V2 r = {a * b.x, a * b.y};			return r;}
-inline V2 operator/(V2 a, f32 b) 		{V2 r = (1.0f/b)*a; 				return r;}
-inline V2 operator/(f32 a, V2 b) 		{V2 r = {a / b.x, a / b.y}; 		return r;}
-inline V2 operator*=(V2 a, f32 b) 		{a.x *= b; a.y *= b;				return a;}
-inline V2 &operator*=(V2 a, V2 b) 		{a = a * b; 						return a;}
-inline V2 &operator/=(V2 &a, f32 b) 	{a = a / b; 						return a;}
+inline V2 operator*(V2 a, f32 b) 	{V2 r = {a.x * b, a.y * b}; 		return r;}
+inline V2 operator*(f32 a, V2 b) 	{V2 r = {a * b.x, a * b.y};		return r;}
+inline V2 operator/(V2 a, f32 b) 	{V2 r = (1.0f/b)*a; 					return r;}
+inline V2 operator/(f32 a, V2 b) 	{V2 r = {a / b.x, a / b.y}; 		return r;}
+inline V2 operator*=(V2 a, f32 b) 	{a.x *= b; a.y *= b;					return a;}
+inline V2 &operator*=(V2 a, V2 b) 	{a = a * b; 							return a;}
+inline V2 &operator/=(V2 &a, f32 b) {a = a / b; 							return a;}
 inline f32 dot(V2 a, V2 b)				{f32 r = a.x * b.x + a.y * b.y; 	return r;}
 
 /*************************************************************************
@@ -229,6 +228,11 @@ union mat4 {
 	float *operator[] (u32 i) { return m[i]; };
 };
 
+/*************************************************************************
+*
+* MATRIX 4 DEFINITIONS AND FUNCTIONS
+*
+* ***********************************************************************/
 inline mat4
 MAT4 (V3 a, V3 b, V3 c)
 {
@@ -437,7 +441,6 @@ typedef struct RectS32 {
    V2S max;
 } RectS32;
 
-
 inline s32
 round_f32_to_s32 (f32 value)
 {
@@ -452,6 +455,13 @@ round_f32_to_u32 (f32 value)
     // u32 result = (u32)_mm_cvtss_si32(_mm_set_ss(value));
     u32 result = (u32)value;
     return result ;
+}
+
+inline s32
+convert_s32_to_u32 (s32 value)
+{
+	u32 r = (u32)value;
+	return r;
 }
 
 inline float
@@ -508,6 +518,16 @@ chebyshev_distance (V2S p0, V2S p1, int scale = 1)
    s32 cx = abs(p0.x - p1.x);
    s32 cy = abs(p0.y - p1.y);
    return D1 * (cx + cy) + (D2 - 2 * D1) * min(cx, cy);
+}
+
+inline s32
+clamp(s32 x, s32 min, s32 max)
+{
+	if (x < min)
+		x = min;
+	if (x > max)
+		x = max;
+	return x;
 }
 
 #define _PEPSIMANIA_MATH_H

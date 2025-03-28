@@ -3,14 +3,8 @@
 #define TILE_COUNT_X 12
 #define TILE_COUNT_Y 8
 
-global_variable V4 player_tile_color       = v4(1.0, 1.0, 0.0, 1.0);
-global_variable V4 traversable_tile_color  = v4(1.0, 0.0, 0.5, 0.0);
-global_variable V4 boundry_tile_color      = v4(0.7, 0.7, 0.7, 1.0);
-global_variable V4 click_tile_color        = v4(0.0, 1.0, 0.0, 1.0);
-global_variable V4 highlight_tile_color    = v4(1.0, 1.0, 1.0, 1.0);
-
 inline Tile
-get_tile (s32 x, s32 y, V4 color, V2 thickness, s32 tile_x, s32 tile_y, int tilevalue)
+get_tile (s32 x, s32 y, V4 color, V2S thickness, s32 tile_x, s32 tile_y, int tilevalue)
 {
    Tile new_tile        = {};
    new_tile.min         = v2s(x, y);
@@ -23,7 +17,7 @@ get_tile (s32 x, s32 y, V4 color, V2 thickness, s32 tile_x, s32 tile_y, int tile
 }
 
 inline Tile
-get_tile (s32 x, s32 y, f32 r, f32 g, f32 b, f32 a, V2 thickness, s32 tile_x, s32 tile_y, int tilevalue)
+get_tile (s32 x, s32 y, f32 r, f32 g, f32 b, f32 a, V2S thickness, s32 tile_x, s32 tile_y, int tilevalue)
 {
    Tile new_tile        = {};
    new_tile.min         = v2s(x, y);
@@ -34,13 +28,6 @@ get_tile (s32 x, s32 y, f32 r, f32 g, f32 b, f32 a, V2 thickness, s32 tile_x, s3
    new_tile.tilevalue   = tilevalue;
    return new_tile;
 }
-
-// inline void
-// draw_tile (GameBackbuffer *buffer, Tile *tile)
-// {
-//    assert(tile && buffer);
-//    debug_draw_rect(buffer, tile->min, tile->max, tile->color.x, tile->color.y, tile->color.z, tile->color.w);
-// }
 
 inline void
 update_tile (Tilemap *tilemap, s32 tile_x, s32 tile_y, V4 color)
@@ -64,12 +51,6 @@ update_tile (Tilemap *tilemap, V2S pos, V4 color)
    assert(tilemap);
    update_tile(tilemap, pos.x, pos.y, color);
 }
-
-// inline void
-// update_tile_position(Tilemap *tilemap, V2S *src_pos)
-// {
-//     TilemapPosition *dst_pos = src_pos;
-// }
 
 inline s32
 get_tileposition(Tilemap *tilemap, int tile_x, int tile_y)
@@ -109,7 +90,7 @@ set_tilevalue(Tilemap *tilemap, s32 tile_x, s32 tile_y, int tilevalue, V4 color)
 // So if the direction vector is +X +Y, the (0,0) of the tilemap should be at the bottom right and if +X, -Y, it should start at the top-right hmm...
 function Tilemap*
 initialize_tilemap (MemoryArena *arena, World *world, u32 tile_width, u32 tile_height, u32 tile_count_x,
-                    u32 tile_count_y, int start_x, int start_y)
+                    u32 tile_count_y, int start_x, int start_y, V4 color)
 {
    Tilemap *res        = world->tilemap;
    // Tilemap *res        = push_struct(arena, Tilemap);
@@ -120,13 +101,11 @@ initialize_tilemap (MemoryArena *arena, World *world, u32 tile_width, u32 tile_h
    res->tiles          = push_array(arena, tile_count_x * tile_count_y, Tile);
    int initial_start_x = start_x;
 
-   for (int y = 0; y <= tile_count_y - 1; ++y) {
-      // res->grid_pos.tile_y = y;
-      for (int x = 0; x <= tile_count_x - 1; ++x) {
-         // res->grid_pos.tile_x    = x;
+   for (u32 y = 0; y <= tile_count_y - 1; ++y) {
+      for (u32 x = 0; x <= tile_count_x - 1; ++x) {
          u32 current_tile_id           = y * tile_count_x + x;
          res->tiles[current_tile_id]   = get_tile(start_x, start_y,
-                                                  traversable_tile_color, v2(2.0, 2.0),
+                                                  color, v2s(2, 2),
                                                   x, y,
                                                   1); // Make all of the tiles traversaable at init time
          start_x += TILE_WIDTH;
@@ -160,28 +139,3 @@ get_neighbors_for_tile (Tile *tile,  u32 neighbor_count)
 
    return neighbors;
 }
-
-
-// function void
-// draw_tilemap (GameBackbuffer *buffer, Tilemap *tilemap, bool clearmap)
-// {
-//    if (clearmap) {
-//       // @Speed: Instead of clearing the entire tilemap. Just clear the tiles that arent being affected
-//       // OR just have a tilemap dirty flag for the tiles that have being marked for update then draw those
-//       for (int y = 0; y <= TILE_COUNT_Y; ++y) {
-//          for (int x = 0; x <= TILE_COUNT_X; ++x) {
-//             u32 tile_index = y * TILE_COUNT_X + x;
-//             update_tile(tilemap, x, y, traversable_tile_color);
-//          }
-//       }
-//    } else {
-//       for (int y = 0; y <= TILE_COUNT_Y; ++y) {
-//          for (int x = 0; x <= TILE_COUNT_X; ++x) {
-//             // @Speed: Instead of clearing the entire tilemap. Just clear the tiles that arent being affected
-//             // OR just have a tilemap dirty flag for the tiles that have being marked for update then draw those
-//             u32 tile_index = y * TILE_COUNT_X + x;
-//             draw_tile(buffer, &tilemap->tiles[tile_index]);
-//          }
-//       }
-//    }
-// }

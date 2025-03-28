@@ -11,11 +11,11 @@ V4 YELLOW   = v4(1.0, 1.0, 0.0, 1.0);
 V4 WHITE    = v4(1.0, 1.0, 1.0, 1.0);
 V4 GRAY     = v4(0.5, 0.5, 0.5, 0.5);
 
-// global_variable V4 player_tile_color       = v4(1.0, 1.0, 0.0, 1.0);
-// global_variable V4 traversable_tile_color  = v4(1.0, 0.0, 0.5, 0.0);
-// global_variable V4 boundry_tile_color      = v4(0.7, 0.7, 0.7, 1.0);
-// global_variable V4 click_tile_color        = v4(0.0, 1.0, 0.0, 1.0);
-// global_variable V4 highlight_tile_color    = v4(1.0, 1.0, 1.0, 1.0);
+global_variable V4 player_tile_color       = v4(1.0, 1.0, 0.0, 1.0);
+global_variable V4 traversable_tile_color  = v4(1.0, 0.0, 0.5, 0.0);
+global_variable V4 boundry_tile_color      = v4(0.7, 0.7, 0.7, 1.0);
+global_variable V4 click_tile_color        = v4(0.0, 1.0, 0.0, 1.0);
+global_variable V4 highlight_tile_color    = v4(1.0, 1.0, 1.0, 1.0);
 
 std::queue<Tile> check_path_queue;
 std::queue<Tile> display_path_queue;
@@ -33,6 +33,25 @@ game_update_and_render (GameMemory *memory, GameInput *input, GameBackbuffer *ba
    int start_y = 100;
    int start_x = 100;
 
+   if (!memory->is_initialized) {
+      arena_alloc(&gamestate->arena,
+                  memory->permanent_storage_size - sizeof(GameState),
+                  (u8*)memory->permanent_storage + sizeof(GameState));
+      gamestate->world        = push_struct(&gamestate->arena, World);
+
+      World *world            = gamestate->world;
+      world->tilemap          = push_struct(&gamestate->arena, Tilemap);
+      world->player           = push_struct(&gamestate->arena, Player);
+      Tilemap *tilemap        = initialize_tilemap(&gamestate->arena, world, 64, 64, 12, 8, 100, 100, traversable_tile_color);
+
+      Player *player          = world->player;
+      player->tile.grid_pos   = {5, 3};
+      player->tile.color      = player_tile_color;
+      player->tile.tilevalue  = 2;
+
+      memory->is_initialized  = true;
+   }
+
    // @Todo: Create a function that draws a rectangle outline
    RectS32 rect1 = {v2s(0, 0),     v2s(1280, 20)}; // TOP
    RectS32 rect2 = {v2s(0, 0),     v2s(15, 700)}; // LEFT
@@ -49,25 +68,6 @@ game_update_and_render (GameMemory *memory, GameInput *input, GameBackbuffer *ba
       modes = RUNTIME_MODE;
    }
 
-   if (!memory->is_initialized) {
-      arena_alloc(&gamestate->arena,
-                  memory->permanent_storage_size - sizeof(GameState),
-                  (u8*)memory->permanent_storage + sizeof(GameState));
-      gamestate->world        = push_struct(&gamestate->arena, World);
-
-      World *world            = gamestate->world;
-      world->tilemap          = push_struct(&gamestate->arena, Tilemap);
-      world->player           = push_struct(&gamestate->arena, Player);
-      Tilemap *tilemap        = initialize_tilemap(&gamestate->arena, world, 64, 64, 12, 8, 100, 100);
-
-      Player *player          = world->player;
-      player->tile.grid_pos   = {5, 3};
-      player->tile.color      = player_tile_color;
-      player->tile.tilevalue  = 2;
-
-      memory->is_initialized  = true;
-   }
-
    World   *world       = gamestate->world;
    Tilemap *tilemap     = world->tilemap;
    Player  *player      = world->player;
@@ -78,7 +78,7 @@ game_update_and_render (GameMemory *memory, GameInput *input, GameBackbuffer *ba
    dest_tile.tilevalue  = 1;
 
    // @Speed: We loop through the tilemap three times
-   draw_tilemap(backbuffer, tilemap, true);
+   clear_tilemap(backbuffer, tilemap, traversable_tile_color);
 
    // set_tilevalue(tilemap, 7,  4 ,0,  boundry_tile_color);
    // set_tilevalue(tilemap, 5,  4, 0,  boundry_tile_color);
@@ -89,9 +89,9 @@ game_update_and_render (GameMemory *memory, GameInput *input, GameBackbuffer *ba
    std::queue<Tile> display_path_queue;
    const u32 NEIGHBOR_COUNT = 8;
 
-   //
-   // Process Inputs
-   //
+/*****************************************************
+*  Process Inputs
+*****************************************************/
    for (int i = 0; i <= TILE_COUNT_Y * TILE_COUNT_X; ++i) {
       Tile mouse_tile = tilemap->tiles[i];
 
@@ -147,7 +147,7 @@ game_update_and_render (GameMemory *memory, GameInput *input, GameBackbuffer *ba
    update_tile(tilemap, player->tile.grid_pos, player_tile_color);
 
    // @Speed: We loop through the three times
-   draw_tilemap(backbuffer, tilemap, false);
+   draw_tilemap(backbuffer, tilemap);
 
    return;
 }
