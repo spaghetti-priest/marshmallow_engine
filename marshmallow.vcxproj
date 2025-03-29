@@ -149,8 +149,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\marshmallow.h" />
+    <ClInclude Include="src\marshmallow_base.h" />
     <ClInclude Include="src\marshmallow_draw.h" />
-    <ClInclude Include="src\marshmallow_platform.h" />
     <ClInclude Include="src\marshmallow_tile.h" />
     <ClInclude Include="src\pepsimania_math.h" />
     <ClInclude Include="src\sdl_marshmallow.h" />

@@ -1,7 +1,7 @@
 #ifndef MARSHMALLOW_VULKAN_H
 
-static bool vulkan_init(SDL_Window *window);
-static void vk_draw_framae();
+bool vulkan_init(SDL_Window *window);
+void vk_draw_framae(SDL_Window *window);
 
 #define MARSHMALLOW_VULKAN_H
 #endif

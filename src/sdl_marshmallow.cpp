@@ -60,7 +60,7 @@ typedef double              f64;
 
 #include "pepsimania_math.h"
 #include "sdl_marshmallow.h"
-#include "marshmallow_platform.h"
+#include "marshmallow_base.h"
 #include "marshmallow.cpp"
 
 global_variable const u32 screen_w = 1280;
@@ -619,10 +619,10 @@ int main (int argc, char **argv)
      return -1;
    }
 
-   // @Incomplete: Allow the user to move the window position using the menu bar in imgui. For now just keep the window border until futher removal
    // @TODO(Bug): When you resize the window, the framebuffer does not refresh / swap
+   // @TODO: Vulkan crashes on resize, so resizable is disable until sawpchain recreation is implemented
    // @Bug: When the window is not in focus the window crashes
-   SDL_WindowFlags window_flags = (SDL_WindowFlags)(//SDL_WINDOW_RESIZABLE   |
+   SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_RESIZABLE   |
                                                   SDL_WINDOW_VULKAN |
                                                   SDL_WINDOW_ALLOW_HIGHDPI);
 
@@ -729,7 +729,7 @@ int main (int argc, char **argv)
       input.mouse_pos.x = x;
       input.mouse_pos.y = y;
 
-      vk_draw_frame();
+      vk_draw_frame(window);
 
       if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) {
          SDL_Delay(10);
@@ -737,9 +737,11 @@ int main (int argc, char **argv)
       }
 
       // game_update_and_render(&game_memory, &input, &global_backbuffer);
-
-      // SDL_swap_framebuffers(&context);
-      // free(context.backbuffer->pixels);
+// @Depreciated: software renderer
+#if 0
+      SDL_swap_framebuffers(&context);
+      free(context.backbuffer->pixels);
+#endif
 
       u64 fps_end_counter = SDL_get_performance_count();
       ++frame_counter;

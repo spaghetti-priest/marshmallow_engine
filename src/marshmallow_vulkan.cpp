@@ -1,5 +1,7 @@
 #include <vulkan/vulkan.h>
 #include "sdl_marshmallow.h"
+#include "pepsimania_math.h"
+
 #include "SDL_vulkan.h"
 // @Todo: Remove this evil header and its malicious functions
 #include <vector>
@@ -11,30 +13,30 @@ const std::vector<const char*> validation_layers = {
     "VK_LAYER_KHRONOS_validation"
 };
 
-static VkInstance instance;
-static VkPhysicalDevice physical_device = VK_NULL_HANDLE;
-static VkDevice device;
-static VkQueue graphics_queue;
-static VkSurfaceKHR surface;
-static VkSurfaceFormatKHR surface_format;
-static VkPresentModeKHR present_mode;
-static VkExtent2D swap_extent;
-static VkSwapchainKHR swapchain;
-static VkPipelineLayout pipeline_layout;
-static VkRenderPass renderpass;
-static VkPipeline graphics_pipeline;
-static VkCommandBuffer command_buffer;
-static VkCommandPool command_pool;
+static VkInstance                   instance;
+static VkPhysicalDevice             physical_device = VK_NULL_HANDLE;
+static VkDevice                     device;
+static VkQueue                      graphics_queue;
+static VkSurfaceKHR                 surface;
+static VkPipelineLayout             pipeline_layout;
+static VkRenderPass                 renderpass;
+static VkPipeline                   graphics_pipeline;
+static VkCommandPool                command_pool;
+static std::vector<VkCommandBuffer> command_buffers;
 
-static std::vector<VkImage> swapchain_images;
-static std::vector<VkImageView> swapchain_image_views;
-static VkFormat swapchain_image_format;
+static VkSwapchainKHR               swapchain;
+static VkExtent2D                   swap_extent;
+static std::vector<VkImage>         swapchain_images;
+static std::vector<VkImageView>     swapchain_image_views;
+static std::vector<VkFramebuffer>   swapchain_framebuffers;
+static VkFormat                     swapchain_image_format;
 
-static std::vector<VkFramebuffer> swapchain_framebuffers;
+std::vector<VkSemaphore>            image_available_semas;
+std::vector<VkSemaphore>            render_finished_semas;
+std::vector<VkFence>                begin_render_fences;
 
-static VkSemaphore image_available_sema;
-static VkSemaphore render_finished_sema;
-static VkFence begin_render_fence;
+const int MAX_IMAGES_PER_FRAME = 3;
+u32 current_frame_index        = 0;
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanReportFunc(
     VkDebugReportFlagsEXT flags,
@@ -65,7 +67,7 @@ vk_debug_callback(VkInstance instance)
 }
 
 static VkShaderModule
-vk_create_shader_module (VkDevice *device, void *shader_data, u32 binary_size)
+vk_create_shader_module (VkDevice device, void *shader_data, u32 binary_size)
 {
    VkShaderModule shader_module;
    VkShaderModuleCreateInfo create_info{};
@@ -74,71 +76,225 @@ vk_create_shader_module (VkDevice *device, void *shader_data, u32 binary_size)
    create_info.codeSize = binary_size;
    create_info.pCode    = (u32*)shader_data;
 
-   if (vkCreateShaderModule(*device, &create_info, nullptr, &shader_module) != VK_SUCCESS) {
+   if (vkCreateShaderModule(device, &create_info, nullptr, &shader_module) != VK_SUCCESS) {
          printf("[ERROR]: Failed to create shader module\n");
    }
 
    return shader_module;
 }
 
-static void
-vk_record_command_buffer(VkCommandBuffer command_buffer, VkRenderPass renderpass,
-                        VkExtent2D swap_extent, VkPipeline graphics_pipeline,
-                        std::vector<VkFramebuffer> swapchain_framebuffers, u32 image_index)
+inline u32
+vk_get_image_count(VkSurfaceCapabilitiesKHR capabilities)
 {
-   VkCommandBufferBeginInfo begin_info = {};
-   begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-   begin_info.flags = 0; // Optional
-   begin_info.pInheritanceInfo = nullptr; // Optional
+   u32 image_count = capabilities.minImageCount + 1;
+   if ((capabilities.maxImageCount > 0) && (image_count > capabilities.maxImageCount))
+      image_count = capabilities.maxImageCount;
 
-   if (vkBeginCommandBuffer(command_buffer, &begin_info) != VK_SUCCESS) {
-       printf("[ERROR]: Failed to begin recording command buffer\n");
-   }
-
-   VkClearValue clear_color = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-
-   VkRenderPassBeginInfo render_pass_info   = {};
-   render_pass_info.sType                   = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-   render_pass_info.renderPass              = renderpass;
-   render_pass_info.framebuffer             = swapchain_framebuffers[image_index];
-   render_pass_info.renderArea.offset       = {0, 0};
-   render_pass_info.renderArea.extent       = swap_extent;
-   render_pass_info.clearValueCount         = 1;
-   render_pass_info.pClearValues            = &clear_color;
-
-   vkCmdBeginRenderPass(command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
-   vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
-
-   VkViewport viewport{};
-   viewport.x = 0.0f;
-   viewport.y = 0.0f;
-   viewport.width = (float)(swap_extent.width);
-   viewport.height = (float)(swap_extent.height);
-   viewport.minDepth = 0.0f;
-   viewport.maxDepth = 1.0f;
-   vkCmdSetViewport(command_buffer, 0, 1, &viewport);
-
-   VkRect2D scissor{};
-   scissor.offset = {0, 0};
-   scissor.extent = swap_extent;
-   vkCmdSetScissor(command_buffer, 0, 1, &scissor);
-
-   vkCmdDraw(command_buffer, 3, 1, 0, 0);
-   vkCmdEndRenderPass(command_buffer);
-
-   if (vkEndCommandBuffer(command_buffer) != VK_SUCCESS) {
-      printf("[ERROR]: Failed to record command buffer\n");
-   }
+   return image_count;
 }
 
-static bool
+std::vector<VkImage>
+vk_get_swapchain_images(VkPhysicalDevice physical_device, VkDevice device,
+                        VkSurfaceKHR surface, VkSwapchainKHR swapchain)
+{
+   std::vector<VkImage> new_swapchain_images;
+   VkSurfaceCapabilitiesKHR capabilities;
+
+   if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &capabilities) != VK_SUCCESS) {
+      printf("[ERROR]: Failed to acquire surface capabilities for swapchain creation\n");
+      // return false;
+   }
+
+   u32 image_count = vk_get_image_count(capabilities);
+
+   vkGetSwapchainImagesKHR(device, swapchain, &image_count, nullptr);
+   new_swapchain_images.resize(image_count);
+   vkGetSwapchainImagesKHR(device, swapchain, &image_count, new_swapchain_images.data());
+   // swapchain_image_format = surface_format.format;
+   return new_swapchain_images;
+}
+
+static VkSwapchainKHR
+vk_create_swapchain(SDL_Window *window,
+                    VkPhysicalDevice physical_device, VkDevice device,
+                    VkSurfaceKHR surface, VkExtent2D &swap_extent)
+{
+   VkSwapchainKHR new_swapchain;
+   VkSurfaceFormatKHR surface_format;
+   VkPresentModeKHR present_mode;
+   VkSurfaceCapabilitiesKHR capabilities;
+   std::vector<VkSurfaceFormatKHR> formats;
+   std::vector<VkPresentModeKHR> present_modes;
+   u32 format_count = 0;
+   u32 mode_count = 0;
+
+   if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &capabilities) != VK_SUCCESS) {
+      printf("[ERROR]: Failed to acquire surface capabilities for swapchain creation\n");
+      // return false;
+   }
+
+   vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &format_count, nullptr);
+   formats.resize(format_count);
+   vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &format_count, formats.data());
+
+   vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &mode_count, nullptr);
+   present_modes.resize(mode_count);
+   vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &mode_count, present_modes.data());
+
+   for (int i = 0; i <= format_count; ++i) {
+      if (formats[i].format == VK_FORMAT_B8G8R8A8_SRGB && formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+         surface_format = formats[i];
+         break;
+      }
+   }
+
+   for (int i = 0; i <= mode_count; ++i) {
+      if (present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
+          present_mode = present_modes[i];
+         break;
+      }
+   }
+
+   if (present_mode == NULL)
+         present_mode = VK_PRESENT_MODE_FIFO_KHR;
+
+   // Some window managers allow us to set the window extent so we need to query the current frame buffer for the width and heigh
+   // and set the extent that way.
+   if (capabilities.currentExtent.width != UINT_MAX) {
+      swap_extent = capabilities.currentExtent;
+   } else {
+      int w, h;
+      SDL_GetWindowSize(window, &w, &h);
+      VkExtent2D new_extent = {(u32)w, (u32)h};
+
+      new_extent.width  = clamp(new_extent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+      new_extent.width  = clamp(new_extent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+      swap_extent       = new_extent;
+   }
+
+   u32 image_count = vk_get_image_count(capabilities);
+
+   VkSwapchainCreateInfoKHR swapchain_create_info{};
+   swapchain_create_info.sType                   = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+   swapchain_create_info.pNext                   = NULL;
+   swapchain_create_info.surface                 = surface;
+   swapchain_create_info.minImageCount           = image_count;
+   swapchain_create_info.imageFormat             = surface_format.format;
+   swapchain_create_info.imageColorSpace         = surface_format.colorSpace;
+   swapchain_create_info.imageExtent             = swap_extent;
+   swapchain_create_info.imageArrayLayers        = 1;
+   swapchain_create_info.imageUsage              = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+   swapchain_create_info.imageSharingMode        = VK_SHARING_MODE_EXCLUSIVE;
+   swapchain_create_info.queueFamilyIndexCount   = 0;
+   swapchain_create_info.pQueueFamilyIndices     = nullptr;
+   swapchain_create_info.preTransform            = capabilities.currentTransform;
+   swapchain_create_info.compositeAlpha          = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+   swapchain_create_info.presentMode             = present_mode;
+   swapchain_create_info.clipped                 = VK_TRUE;
+   swapchain_create_info.oldSwapchain            = VK_NULL_HANDLE; //@Todo: Null handle until swapchain recreation is online
+
+   if (vkCreateSwapchainKHR(device, &swapchain_create_info, nullptr, &new_swapchain) != VK_SUCCESS) {
+      printf("[ERROR]: Failed to create swapchain\n");
+      // return false;
+   }
+
+   // @Todo: Assign this outside of the function or maybe send it in as a pointer?
+   swapchain_image_format = surface_format.format;
+   return new_swapchain;
+}
+
+std::vector<VkImageView>
+vk_create_swapchain_image_views(VkDevice device, std::vector<VkImage> swapchain_images)
+{
+   std::vector<VkImageView> new_swapchain_image_views;
+
+   new_swapchain_image_views.resize(swapchain_images.size());
+   for (u32 i = 0; i < new_swapchain_image_views.size(); ++i) {
+      VkImageViewCreateInfo view_create_info{};
+      view_create_info.sType                       = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+      view_create_info.pNext                       = NULL;
+      view_create_info.image                       = swapchain_images[i];
+      view_create_info.viewType                    = VK_IMAGE_VIEW_TYPE_2D;
+      view_create_info.format                      = swapchain_image_format;
+      view_create_info.components.r                = VK_COMPONENT_SWIZZLE_IDENTITY;
+      view_create_info.components.g                = VK_COMPONENT_SWIZZLE_IDENTITY;
+      view_create_info.components.b                = VK_COMPONENT_SWIZZLE_IDENTITY;
+      view_create_info.components.a                = VK_COMPONENT_SWIZZLE_IDENTITY;
+      view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      view_create_info.subresourceRange.levelCount = 1;
+      view_create_info.subresourceRange.layerCount = 1;
+      view_create_info.subresourceRange.baseMipLevel = 0;
+      view_create_info.subresourceRange.baseArrayLayer = 0;
+
+      if (vkCreateImageView(device, &view_create_info, nullptr, &new_swapchain_image_views[i]) != VK_SUCCESS) {
+         printf("[ERROR]: Failed to create image views\n");
+         // return false;
+      }
+   }
+
+   return new_swapchain_image_views;
+}
+
+std::vector<VkFramebuffer>
+vk_create_framebuffers(std::vector<VkImageView> swapchain_image_view, VkRenderPass renderpass, VkExtent2D swap_extent)
+{
+   std::vector<VkFramebuffer> framebuffers;
+   framebuffers.resize(swapchain_image_views.size());
+   for (u32 i = 0; i < swapchain_image_views.size(); ++i) {
+      VkImageView attachments[] = {
+         swapchain_image_views[i]
+      };
+
+       VkFramebufferCreateInfo framebuffer_info{};
+       framebuffer_info.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+       framebuffer_info.renderPass      = renderpass;
+       framebuffer_info.attachmentCount = 1;
+       framebuffer_info.pAttachments    = attachments;
+       framebuffer_info.width           = swap_extent.width;
+       framebuffer_info.height          = swap_extent.height;
+       framebuffer_info.layers          = 1;
+
+      if (vkCreateFramebuffer(device, &framebuffer_info, nullptr, &framebuffers[i]) != VK_SUCCESS) {
+         printf("[ERROR]: Failed to create framebuffer\n");
+         // return false;
+      }
+   }
+
+   return framebuffers;
+}
+
+static void
+vk_kill_swpachain()
+{
+   for (int i = 0; i < swapchain_framebuffers.size(); ++i) {
+      vkDestroyFramebuffer(device, swapchain_framebuffers[i], nullptr);
+   }
+   for (int i = 0; i < swapchain_image_views.size(); ++i) {
+      vkDestroyImageView(device, swapchain_image_views[i], nullptr);
+   }
+   vkDestroySwapchainKHR(device, swapchain, nullptr);
+}
+
+static void
+vk_recreate_swapchain(SDL_Window *window)
+{
+   vkDeviceWaitIdle(device);
+   vk_kill_swpachain();
+   swapchain               = vk_create_swapchain(window, physical_device, device, surface, swap_extent);
+   swapchain_images        = vk_get_swapchain_images(physical_device, device, surface, swapchain);
+   swapchain_image_views   = vk_create_swapchain_image_views(device, swapchain_images);
+   swapchain_framebuffers  = vk_create_framebuffers(swapchain_image_views, renderpass, swap_extent);
+}
+
+
+bool
 vulkan_init(SDL_Window *window)
 {
    bool success = false;
 #if NDEBUG
-   const bool enable_validation_layer = true;
-#else
    const bool enable_validation_layer = false;
+#else
+   const bool enable_validation_layer = true;
 #endif
 
    VkApplicationInfo app_info  = {};
@@ -154,7 +310,6 @@ vulkan_init(SDL_Window *window)
    success = SDL_Vulkan_GetInstanceExtensions(window,
                                               &extension_count,
                                               NULL);
-
    std::vector<const char *>extension_names(extension_count);
 
    success = SDL_Vulkan_GetInstanceExtensions(window,
@@ -167,7 +322,6 @@ vulkan_init(SDL_Window *window)
    instance_info.enabledExtensionCount    = extension_count;
    instance_info.ppEnabledExtensionNames  = extension_names.data();
    instance_info.enabledLayerCount        = 0;
-   VkResult res = vkCreateInstance(&instance_info, nullptr, &instance);
 
    {
       u32 layer_count = 0;
@@ -190,7 +344,10 @@ vulkan_init(SDL_Window *window)
       }
    }
 
-   vk_debug_callback(instance);
+   VkResult res = vkCreateInstance(&instance_info, nullptr, &instance);
+
+   if (enable_validation_layer)
+      vk_debug_callback(instance);
 
    // Surface creation
    success = SDL_Vulkan_CreateSurface(window,
@@ -276,110 +433,9 @@ vulkan_init(SDL_Window *window)
       vkGetDeviceQueue(device, graphics_family_index, 0, &graphics_queue);
    }
 
-   // Swapchain init
-   {
-      VkSurfaceCapabilitiesKHR capabilities;
-      std::vector<VkSurfaceFormatKHR> formats;
-      std::vector<VkPresentModeKHR> present_modes;
-      u32 format_count = 0;
-      u32 mode_count = 0;
-
-      if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &capabilities) != VK_SUCCESS) {
-         printf("[ERROR]: Failed to acquire surface capabilities for swapchain creation\n");
-         return false;
-      }
-
-      vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &format_count, nullptr);
-      formats.resize(format_count);
-      vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &format_count, formats.data());
-
-      vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &mode_count, nullptr);
-      present_modes.resize(mode_count);
-      vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &mode_count, present_modes.data());
-
-      for (int i = 0; i <= format_count; ++i) {
-         if (formats[i].format == VK_FORMAT_B8G8R8A8_SRGB && formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-            surface_format = formats[i];
-            break;
-         }
-      }
-
-      for (int i = 0; i <= mode_count; ++i) {
-         if (present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
-             present_mode = present_modes[i];
-            break;
-         }
-      }
-
-      if (present_mode == NULL)
-         present_mode = VK_PRESENT_MODE_FIFO_KHR;
-
-      // Some window managers allow us to set the window extent so we need to query the current frame buffer for the width and heigh
-      // and set the extent that way. But for now.... this.
-      if (capabilities.currentExtent.width != UINT_MAX)
-         swap_extent = capabilities.currentExtent;
-
-      u32 image_count = capabilities.minImageCount + 1;
-      if ((capabilities.maxImageCount > 0) && (image_count > capabilities.maxImageCount))
-         image_count = capabilities.maxImageCount;
-
-      VkSwapchainCreateInfoKHR swapchain_create_info = {};
-      swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-      swapchain_create_info.pNext = NULL;
-      swapchain_create_info.surface = surface;
-      swapchain_create_info.minImageCount = image_count;
-      swapchain_create_info.imageFormat = surface_format.format;
-      swapchain_create_info.imageColorSpace = surface_format.colorSpace;
-      swapchain_create_info.imageExtent = swap_extent;
-      swapchain_create_info.imageArrayLayers = 1;
-      swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-      swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-      swapchain_create_info.queueFamilyIndexCount = 0;
-      swapchain_create_info.pQueueFamilyIndices = nullptr;
-      swapchain_create_info.preTransform = capabilities.currentTransform;
-      swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-      swapchain_create_info.presentMode = present_mode;
-      swapchain_create_info.clipped = VK_TRUE;
-      swapchain_create_info.oldSwapchain = VK_NULL_HANDLE; //@Todo: Null handle until swapchain recreation is online
-
-      if (vkCreateSwapchainKHR(device, &swapchain_create_info, nullptr, &swapchain) != VK_SUCCESS) {
-         printf("[ERROR]: Failed to create swapchain\n");
-         return false;
-      }
-
-      vkGetSwapchainImagesKHR(device, swapchain, &image_count, nullptr);
-      swapchain_images.resize(image_count);
-      vkGetSwapchainImagesKHR(device, swapchain, &image_count, swapchain_images.data());
-
-      swapchain_image_format = surface_format.format;
-   }
-
-   // Swapchain image views init
-   {
-      swapchain_image_views.resize(swapchain_images.size());
-      for (u32 i = 0; i < swapchain_image_views.size(); ++i) {
-         VkImageViewCreateInfo view_create_info = {};
-         view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-         view_create_info.pNext = NULL;
-         view_create_info.image = swapchain_images[i];
-         view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-         view_create_info.format = swapchain_image_format;
-         view_create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-         view_create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-         view_create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-         view_create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-         view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-         view_create_info.subresourceRange.baseMipLevel = 0;
-         view_create_info.subresourceRange.levelCount = 1;
-         view_create_info.subresourceRange.baseArrayLayer = 0;
-         view_create_info.subresourceRange.layerCount = 1;
-
-         if (vkCreateImageView(device, &view_create_info, nullptr, &swapchain_image_views[i]) != VK_SUCCESS) {
-            printf("[ERROR]: Failed to create image views\n");
-            return false;
-         }
-      }
-   }
+   swapchain             = vk_create_swapchain(window, physical_device, device, surface, swap_extent);
+   swapchain_images      = vk_get_swapchain_images(physical_device, device, surface, swapchain);
+   swapchain_image_views = vk_create_swapchain_image_views(device, swapchain_images);
 
    // Renderpass and subpass init
    {
@@ -430,8 +486,8 @@ vulkan_init(SDL_Window *window)
       MarshFile vertex_shader_file  = debug_read_file("C:/marshmallow/shaders/vert.spv");
       MarshFile frag_shader_file    = debug_read_file("C:/marshmallow/shaders/frag.spv");
 
-      VkShaderModule vertex_module  = vk_create_shader_module(&device, vertex_shader_file.contents, vertex_shader_file.size);
-      VkShaderModule frag_module    = vk_create_shader_module(&device, frag_shader_file.contents, frag_shader_file.size);
+      VkShaderModule vertex_module  = vk_create_shader_module(device, vertex_shader_file.contents, vertex_shader_file.size);
+      VkShaderModule frag_module    = vk_create_shader_module(device, frag_shader_file.contents, frag_shader_file.size);
 
       VkPipelineShaderStageCreateInfo vertex_stage_info  = {};
       vertex_stage_info.sType                            = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -572,31 +628,7 @@ vulkan_init(SDL_Window *window)
 
    }
 
-   // Create Framebuffers init
-   {
-      swapchain_framebuffers.resize(swapchain_image_views.size());
-
-      for (u32 i = 0; i < swapchain_image_views.size(); ++i) {
-         VkImageView attachments[] = {
-            swapchain_image_views[i]
-         };
-
-          VkFramebufferCreateInfo framebuffer_info{};
-          framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-          framebuffer_info.renderPass = renderpass;
-          framebuffer_info.attachmentCount = 1;
-          framebuffer_info.pAttachments = attachments;
-          framebuffer_info.width = swap_extent.width;
-          framebuffer_info.height = swap_extent.height;
-          framebuffer_info.layers = 1;
-
-         if (vkCreateFramebuffer(device, &framebuffer_info, nullptr, &swapchain_framebuffers[i]) != VK_SUCCESS) {
-            printf("[ERROR]: Failed to create framebuffer\n");
-            return false;
-         }
-      }
-
-   }
+   swapchain_framebuffers = vk_create_framebuffers(swapchain_image_views, renderpass, swap_extent);
 
    // Create command pools init
    {
@@ -610,12 +642,14 @@ vulkan_init(SDL_Window *window)
           return false;
       }
 
-      VkCommandBufferAllocateInfo allocInfo{};
-      allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-      allocInfo.commandPool = command_pool;
-      allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-      allocInfo.commandBufferCount = 1;
-      if (vkAllocateCommandBuffers(device, &allocInfo, &command_buffer) != VK_SUCCESS) {
+   // Create command buffers init
+      command_buffers.resize(MAX_IMAGES_PER_FRAME);
+      VkCommandBufferAllocateInfo alloc_info  = {};
+      alloc_info.sType                        = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+      alloc_info.commandPool                  = command_pool;
+      alloc_info.level                        = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+      alloc_info.commandBufferCount           = command_buffers.size();
+      if (vkAllocateCommandBuffers(device, &alloc_info, command_buffers.data()) != VK_SUCCESS) {
          printf("[ERROR] Failed to allocate command buffers\n");
          return false;
       }
@@ -623,38 +657,101 @@ vulkan_init(SDL_Window *window)
       bool poo = true;
    }
 
-   return true;
-}
+   image_available_semas.resize(MAX_IMAGES_PER_FRAME);
+   render_finished_semas.resize(MAX_IMAGES_PER_FRAME);
+   begin_render_fences.resize(MAX_IMAGES_PER_FRAME);
 
-void
-vk_draw_frame()
-{
-   u32 image_index;
-
-   VkSemaphoreCreateInfo semaphore_info = {};
+   VkSemaphoreCreateInfo semaphore_info{};
    semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-   VkFenceCreateInfo fence_info = {};
+   VkFenceCreateInfo fence_info{};
    fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
    fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-   if (vkCreateSemaphore(device, &semaphore_info, nullptr, &image_available_sema)   != VK_SUCCESS ||
-       vkCreateSemaphore(device, &semaphore_info, nullptr, &render_finished_sema)   != VK_SUCCESS ||
-       vkCreateFence(device, &fence_info, nullptr, &begin_render_fence)             != VK_SUCCESS) {
-       printf("[ERROR]: Failed to create semaphores and fences\n");
+   for (int i = 0; i < MAX_IMAGES_PER_FRAME; ++i) {
+      if (vkCreateSemaphore(device, &semaphore_info, nullptr, &image_available_semas[i])   != VK_SUCCESS ||
+          vkCreateSemaphore(device, &semaphore_info, nullptr, &render_finished_semas[i])   != VK_SUCCESS ||
+          vkCreateFence(device, &fence_info, nullptr, &begin_render_fences[i])             != VK_SUCCESS) {
+          printf("[ERROR]: Failed to create semaphores and fences\n");
+      }
    }
 
-   vkWaitForFences(device, 1, &begin_render_fence, VK_TRUE, UINT64_MAX);
-   vkResetFences(device, 1, &begin_render_fence);
+   return true;
+}
 
-   vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, image_available_sema, VK_NULL_HANDLE, &image_index);
+static void
+vk_record_command_buffer(VkCommandBuffer command_buffer, VkRenderPass renderpass,
+                        VkExtent2D swap_extent, VkPipeline graphics_pipeline,
+                        std::vector<VkFramebuffer> swapchain_framebuffers, u32 image_index)
+{
+   VkCommandBufferBeginInfo begin_info = {};
+   begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+   begin_info.flags = 0; // Optional
+   begin_info.pInheritanceInfo = nullptr; // Optional
 
-   vkResetCommandBuffer(command_buffer, 0);
-   vk_record_command_buffer(command_buffer, renderpass, swap_extent, graphics_pipeline, swapchain_framebuffers, image_index);
+   if (vkBeginCommandBuffer(command_buffer, &begin_info) != VK_SUCCESS) {
+       printf("[ERROR]: Failed to begin recording command buffer\n");
+   }
 
-   VkSemaphore wait_semaphores[]       = {image_available_sema};
+   VkClearValue clear_color = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+
+   VkRenderPassBeginInfo render_pass_info    = {};
+   render_pass_info.sType                    = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+   render_pass_info.renderPass               = renderpass;
+   render_pass_info.framebuffer              = swapchain_framebuffers[image_index];
+   render_pass_info.renderArea.offset        = {0, 0};
+   render_pass_info.renderArea.extent        = swap_extent;
+   render_pass_info.clearValueCount          = 1;
+   render_pass_info.pClearValues             = &clear_color;
+
+   vkCmdBeginRenderPass(command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+   vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
+
+   VkViewport viewport   = {};
+   viewport.x            = 0.0f;
+   viewport.y            = 0.0f;
+   viewport.width        = (float)(swap_extent.width);
+   viewport.height       = (float)(swap_extent.height);
+   viewport.minDepth     = 0.0f;
+   viewport.maxDepth     = 1.0f;
+   vkCmdSetViewport(command_buffer, 0, 1, &viewport);
+
+   VkRect2D scissor = {};
+   scissor.offset = {0, 0};
+   scissor.extent = swap_extent;
+   vkCmdSetScissor(command_buffer, 0, 1, &scissor);
+
+   vkCmdDraw(command_buffer, 3, 1, 0, 0);
+   vkCmdEndRenderPass(command_buffer);
+
+   if (vkEndCommandBuffer(command_buffer) != VK_SUCCESS) {
+      printf("[ERROR]: Failed to record command buffer\n");
+   }
+}
+
+void
+vk_draw_frame(SDL_Window *window)
+{
+   u32 image_index;
+
+   vkWaitForFences(device, 1, &begin_render_fences[current_frame_index], VK_TRUE, UINT64_MAX);
+   VkResult res = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, image_available_semas[current_frame_index], VK_NULL_HANDLE, &image_index);
+
+   if (res == VK_ERROR_OUT_OF_DATE_KHR) {
+      vk_recreate_swapchain(window);
+      return;
+   } else if (res != VK_SUCCESS && res != VK_SUBOPTIMAL_KHR) {
+      printf("[ERROR]: Failed to present the swapchain image\n");
+   }
+
+   vkResetFences(device, 1, &begin_render_fences[current_frame_index]);
+
+   vkResetCommandBuffer(command_buffers[current_frame_index], 0);
+   vk_record_command_buffer(command_buffers[current_frame_index], renderpass, swap_extent, graphics_pipeline, swapchain_framebuffers, image_index);
+
+   VkSemaphore wait_semaphores[]       = {image_available_semas[current_frame_index]};
    VkPipelineStageFlags wait_stages[]  = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-   VkSemaphore signal_semaphores[]     = {render_finished_sema};
+   VkSemaphore signal_semaphores[]     = {render_finished_semas[current_frame_index]};
 
    VkSubmitInfo submit_info          = {};
    submit_info.sType                 = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -664,29 +761,39 @@ vk_draw_frame()
    submit_info.pSignalSemaphores     = signal_semaphores;
    submit_info.pWaitDstStageMask     = wait_stages;
    submit_info.commandBufferCount    = 1;
-   submit_info.pCommandBuffers       = &command_buffer;
+   submit_info.pCommandBuffers       = &command_buffers[current_frame_index];
 
-   if (vkQueueSubmit(graphics_queue, 1, &submit_info, begin_render_fence) != VK_SUCCESS) {
+   if (vkQueueSubmit(graphics_queue, 1, &submit_info, begin_render_fences[current_frame_index]) != VK_SUCCESS) {
       printf("[ERROR] Failed to submit draw command buffer\n");
    }
 
    VkSwapchainKHR swapchains[] = {swapchain};
 
-   VkPresentInfoKHR present_info{};
-   present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-   present_info.waitSemaphoreCount = 1;
-   present_info.pWaitSemaphores = signal_semaphores;
-   present_info.pResults = nullptr; // Optional
-   present_info.swapchainCount = 1;
-   present_info.pSwapchains = swapchains;
-   present_info.pImageIndices = &image_index;
+   VkPresentInfoKHR present_info    = {};
+   present_info.sType               = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+   present_info.waitSemaphoreCount  = 1;
+   present_info.pWaitSemaphores     = signal_semaphores;
+   present_info.pResults            = nullptr; // Optional
+   present_info.swapchainCount      = 1;
+   present_info.pSwapchains         = swapchains;
+   present_info.pImageIndices       = &image_index;
 
-   vkQueuePresentKHR(graphics_queue, &present_info);
+   res = vkQueuePresentKHR(graphics_queue, &present_info);
+
+   if (res == VK_ERROR_OUT_OF_DATE_KHR) {
+      vk_recreate_swapchain(window);
+   } else if (res != VK_SUCCESS && res != VK_SUBOPTIMAL_KHR) {
+      printf("[ERROR]: Failed to present the swapchain image\n");
+   }
+
+   current_frame_index = (current_frame_index + 1) % MAX_IMAGES_PER_FRAME;
 }
 
 void vk_cleanup()
 {
-   vkDestroySemaphore(device, image_available_sema, nullptr);
-   vkDestroySemaphore(device, render_finished_sema, nullptr);
-   vkDestroyFence(device, begin_render_fence, nullptr);
+   for (int i = 0; i < MAX_IMAGES_PER_FRAME; ++i) {
+      vkDestroySemaphore(device, image_available_semas[i], nullptr);
+      vkDestroySemaphore(device, render_finished_semas[i], nullptr);
+      vkDestroyFence(device, begin_render_fences[i], nullptr);
+   }
 }
