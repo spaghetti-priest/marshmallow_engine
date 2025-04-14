@@ -1,20 +1,19 @@
-#version 450
+#version 450 core
 
-layout(location = 0) out vec3 frag_color;
+layout(location = 0) in vec3 in_positions;
+layout(location = 1) in vec3 in_colors;
+layout(location = 2) in vec2 in_offsets;
 
-vec2 positions[3] = vec2[](
-    vec2(0.0, -0.5),
-    vec2(0.5, 0.5),
-    vec2(-0.5, 0.5)
-);
+out vec4 frag_color;
 
-vec3 colors[3] = vec3[](
-    vec3(1.0, 0.0, 0.0),
-    vec3(0.0, 1.0, 0.0),
-    vec3(0.0, 0.0, 1.0)
-);
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 proj;
 
 void main() {
-    gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
-    frag_color = colors[gl_VertexIndex];
+    gl_Position = proj * view * model * vec4(in_positions.x + in_offsets.x,
+                       in_positions.y + in_offsets.y,
+                       in_positions.z,
+                       1.0);
+    frag_color = vec4(in_colors, 1.0);
 }

@@ -1,42 +1,32 @@
 #ifndef _PEPSIMANIA_MATH_H
 
+/*************************************************************************
+* PEPSIMANIA MATH: Version 0.00.1
+* @Note: This file is not a very suitable math library since most of the functions
+* are not battle tested. So it is probably better to use glm or another math library
+* when possible
+* ***********************************************************************/
+
+// @Cleanup: Might export all of the functionality (e.g math functions) into a .c file perhaps. Should also battle test this file
+// @Cleanup: Might export all of the functionality (e.g math functions) into a .c file perhaps. Should also battle test this file
+// @Cleanup: Might export all of the functionality (e.g math functions) into a .c file perhaps. Should also battle test this file
+
 #include <float.h>
 #include <stdio.h>
 #include <iostream>
-
-// typedef unsigned char 		u8;
-// typedef unsigned short 		u16;
-// typedef unsigned int 		u32;
-// typedef unsigned long long 	u64;
-
-// typedef signed char 		s8;
-// typedef signed short 		s16;
-// typedef signed int 			s32;
-// typedef signed long long 	s64;
-
-// typedef int 				b32;
-// typedef int 				b32x;
-// typedef float 				f32;
-// typedef double 				f64;
-//typedef uintptr_t umm;
-
-typedef struct buffer {
-	//umm count;
-	u8 *data;
-} buffer;
 
 #define MIN(a, b) 		(a < b ? a : b)
 #define MAX(a, b) 		(a > b ? a : b)
 #define MIN3(a, b, c) 	(MIN(MIN(a, b), c))
 #define MAX3(a, b, c) 	(MAX(MAX(a, b), c))
-#define sq(a) 			(a * a)
-#define cube(a) 		(a * a * a)
+#define SQUARED(a) 		(a * a)
+#define CUBED(a) 			(a * a * a)
 
 /*************************************************************************
- *
- * VECTOR 2 DEFINITIONS AND FUNCTIONS
- *
- * ***********************************************************************/
+*
+* VECTOR 2 DEFINITIONS AND FUNCTIONS
+*
+* ***********************************************************************/
 typedef union V2S V2S;
 union V2S {
 	struct
@@ -68,6 +58,9 @@ union V2 {
 	}
 };
 
+// @Note: That Eskril steenberg video did cause me to reflect and might possibly rewrite the math functionality in more
+// explicit terms rather than operator overloading. But operator overloading is useful. Test out in test code.
+// If I write the function code in .c it will remove operator overloading anyways so \_(-_-)_/
 // Integer v2
 inline V2S v2s(int x, int y)				{V2S r = {x, y}; 						return r;}
 inline V2S operator+(V2S a, V2S b) 		{V2S r = {a.x + b.x, a.y + b.y}; return r;}

@@ -46,11 +46,8 @@ typedef int                 b32x;
 typedef float               f32;
 typedef double              f64;
 
-#include "marshmallow_vulkan.h"
-#include "marshmallow_vulkan.cpp"
-
-#define function static
-#define global_variable static
+// #include "marshmallow_vulkan.h"
+// #include "marshmallow_vulkan.cpp"
 
 #define SCREEN_FPS 60
 #define SCREEN_TICKS_PER_FRAME 1000 / SCREEN_FPS
@@ -61,6 +58,10 @@ typedef double              f64;
 #include "pepsimania_math.h"
 #include "sdl_marshmallow.h"
 #include "marshmallow_base.h"
+
+#include "marshmallow_gl.h"
+#include "marshmallow_gl.cpp"
+
 #include "marshmallow.cpp"
 
 global_variable const u32 screen_w = 1280;
@@ -179,60 +180,60 @@ reserve_memory_block (size_t size)
 function MarshFile
 debug_read_file (const char *filename)
 {
-    MarshFile res = {};
-    FILE *f = nullptr;
-    f = fopen(filename, "rb");
-    const char *strip_name = strip_file_path(filename);
+   MarshFile res = {};
+   FILE *f = nullptr;
+   f = fopen(filename, "rb");
+   const char *strip_name = strip_file_path(filename);
 
-    if (!f) {
-        printf("[ERROR]: Failed to open file: [%s]\n", strip_name);
-        return res;
-    }
+   if (!f) {
+     printf("[ERROR]: Failed to open file: [%s]\n", strip_name);
+     return res;
+   }
 
-    fseek(f, 0, SEEK_END);
-    u32 filesize = ftell(f);
-    fseek(f, 0, SEEK_SET);
+   fseek(f, 0, SEEK_END);
+   u32 filesize = ftell(f);
+   fseek(f, 0, SEEK_SET);
 
-    void *filecontents  = malloc(sizeof(void*) * filesize);
-    u32 bytes_read      = fread(filecontents, sizeof(void*), filesize, f);
+   void *filecontents  = malloc(sizeof(void*) * filesize);
+   u32 bytes_read      = fread(filecontents, sizeof(void*), filesize, f);
 
 /*    if(bytes_read != filesize) {
         printf("[ERROR]: Bytes read does not equal total filesize, possibly corrupted file!\n");
         return res;
     }
 */
-    res.contents    = filecontents;
-    res.size        = filesize;
-    fclose(f);
-    return res;
+   res.contents    = filecontents;
+   res.size        = filesize;
+   fclose(f);
+   return res;
 }
 
 function bool
 debug_write_file (MarshFile *file, const char *filename)
 {
-    FILE *f = fopen(filename, "wb");
-    if(!f) {
-        printf("[ERROR]: Failed to open file");
-        return 0;
-    }
+   FILE *f = fopen(filename, "wb");
+   if(!f) {
+     printf("[ERROR]: Failed to open file");
+     return 0;
+   }
 
-    u32 bytes_written = fwrite(file->contents, sizeof(void*), file->size, f);
-    fclose(f);
+   u32 bytes_written = fwrite(file->contents, sizeof(void*), file->size, f);
+   fclose(f);
 
-    return 1;
+   return 1;
 }
 /*
 function bool
 debug_list_all_directories(const char *dirname)
 {
-    dirent *directory_entry = {};
-    DIR *dir = opendir(dirname);
-    if (dir == NULL) printf("Could not open current directory\n");
+   dirent *directory_entry = {};
+   DIR *dir = opendir(dirname);
+   if (dir == NULL) printf("Could not open current directory\n");
 
-    while ((directory_entry = readdir(dir)) != NULL)
-        printf("%s\n", directory_entry->d_name);
-    closedir(dir);
-    return 1;
+   while ((directory_entry = readdir(dir)) != NULL)
+      printf("%s\n", directory_entry->d_name);
+   closedir(dir);
+   return 1;
 }
 */
 #else
@@ -623,7 +624,8 @@ int main (int argc, char **argv)
    // @TODO: Vulkan crashes on resize, so resizable is disable until sawpchain recreation is implemented
    // @Bug: When the window is not in focus the window crashes
    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_RESIZABLE   |
-                                                  SDL_WINDOW_VULKAN |
+                                                   SDL_WINDOW_OPENGL  |
+                                                  // SDL_WINDOW_VULKAN |
                                                   SDL_WINDOW_ALLOW_HIGHDPI);
 
    window = SDL_CreateWindow("Marshmallow\n",
@@ -691,7 +693,8 @@ int main (int argc, char **argv)
       }
    }
 
-   bool success = vulkan_init(window);
+   // bool success = vulkan_init(window);
+   bool success = init_opengl(window, screen_w, screen_h);
 
    // bool s = load_wav_file("C:\\marshmallow\\data\\searching_the_past.wav");
    while (context.running)
@@ -705,7 +708,6 @@ int main (int argc, char **argv)
 
       SDL_process_events(&context, &input);
 
-      // @Incomplete: Create a game specific backbuffer then fill it up with this information to make this cross platform
       SDL_Backbuffer backbuffer   = {0};
       backbuffer.w                = screen_w;
       backbuffer.h                = screen_h;
@@ -729,7 +731,6 @@ int main (int argc, char **argv)
       input.mouse_pos.x = x;
       input.mouse_pos.y = y;
 
-      vk_draw_frame(window);
 
       if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) {
          SDL_Delay(10);
@@ -737,11 +738,14 @@ int main (int argc, char **argv)
       }
 
       // game_update_and_render(&game_memory, &input, &global_backbuffer);
+      gl_render_frame();
+
 // @Depreciated: software renderer
 #if 0
       SDL_swap_framebuffers(&context);
-      free(context.backbuffer->pixels);
 #endif
+      free(context.backbuffer->pixels);
+      gl_swap_framebuffers(window);
 
       u64 fps_end_counter = SDL_get_performance_count();
       ++frame_counter;
@@ -754,6 +758,7 @@ int main (int argc, char **argv)
       }
    }
 
+   gl_cleanup();
    SDL_DestroyWindow(window);
    SDL_Quit();
 

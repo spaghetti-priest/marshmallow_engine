@@ -1,11 +1,10 @@
-#ifndef MARSHMALLOW_PLATFORM_H
-#define MARSHMALLOW_PLATFORM_H
+#ifndef MARSHMALLOW_BASE_H
 
 //
 // This file is just a base for a lot of logic and data that are transient between platforms.
-// For a particular platform layer, it uses the logic and data provided as hooks into its own
-// platform specific implementation. They may be separated out into their own distinct files
-// later on but they are kept here for now.
+// If one has any wishes to hook into the engine logic, the following functions and data
+// are wrappers surrounding platform specific functionality that one must utilize as
+// hooks into the game logic
 //
 
 // typedef unsigned char       u8;
@@ -30,6 +29,8 @@
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 #define Pi32 3.14159265359f
 
+#define function static
+#define global_variable static
 
 typedef struct GameMemory {
    bool        is_initialized;
@@ -80,4 +81,5 @@ typedef struct GameBackbuffer {
    u32 bytes_pp;
 } GameBackbuffer;
 
+#define MARSHMALLOW_BASE_H
 #endif

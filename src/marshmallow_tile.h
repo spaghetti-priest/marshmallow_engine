@@ -1,5 +1,4 @@
 #ifndef MARSHMALLOW_TILE_H
-#define MARSHMALLOW_TILE_H
 
 typedef struct Tile {
    V2S min;
@@ -25,4 +24,13 @@ typedef struct Tilemap {
    Tile *tiles;
 } Tilemap;
 
+function Tile *get_neighbors_for_tile(Tile *tile,  u32 neighbor_count);
+function Tilemap *initialize_tilemap(MemoryArena *arena, s32 tile_width, s32 tile_height, u32 tile_count_x, u32 tile_count_y, int start_x, int start_y, V4 color);
+function void update_tile(Tilemap *tilemap, V2S pos, V4 color);
+function void set_tilevalue(Tilemap *tilemap, s32 tile_x, s32 tile_y, int tilevalue, V4 color);
+function void draw_tile(GameBackbuffer *buffer, Tile *tile);
+function void clear_tilemap(GameBackbuffer *buffer, Tilemap *tilemap, V4 color);
+function void draw_tilemap(GameBackbuffer *buffer, Tilemap *tilemap);
+
+#define MARSHMALLOW_TILE_H
 #endif

@@ -111,7 +111,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>SDL2.lib;SDL2main.lib;opengl32.lib;OpenAL32.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.309.0\Lib;C:\marshmallow\extern\openal-soft\build\Release;C:\marshmallow\extern\SDL2\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\marshmallow\extern;C:\VulkanSDK\1.4.309.0\Lib;C:\marshmallow\extern\openal-soft\build\Release;C:\marshmallow\extern\SDL2\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <IgnoreSpecificDefaultLibraries>msvcrt.lib</IgnoreSpecificDefaultLibraries>
     </Link>
@@ -133,10 +133,14 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="extern\glad.c" />
     <ClCompile Include="src\marshmallow.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="src\marshmallow_draw.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="src\marshmallow_gl.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="src\marshmallow_tile.cpp">
@@ -151,6 +155,7 @@
     <ClInclude Include="src\marshmallow.h" />
     <ClInclude Include="src\marshmallow_base.h" />
     <ClInclude Include="src\marshmallow_draw.h" />
+    <ClInclude Include="src\marshmallow_gl.h" />
     <ClInclude Include="src\marshmallow_tile.h" />
     <ClInclude Include="src\pepsimania_math.h" />
     <ClInclude Include="src\sdl_marshmallow.h" />

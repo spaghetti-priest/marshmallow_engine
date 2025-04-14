@@ -1,7 +1,26 @@
 #include "marshmallow.h"
-#include "marshmallow_tile.cpp"
 #include "marshmallow_draw.h"
 #include "marshmallow_draw.cpp"
+#include "marshmallow_tile.h"
+#include "marshmallow_tile.cpp"
+
+typedef struct Player {
+   V2 pos;
+   Tile tile;
+   Tile *next;
+} Player;
+
+typedef struct World {
+   Tilemap *tilemap;
+   Player *player;
+} World;
+
+typedef struct GameState {
+   MemoryArena arena;
+   World *world;
+   void *thing1;
+   GameModes game_modes;
+} GameState;
 
 // @Cleanup: Make this into an enum or table
 V4 RED      = v4(1.0, 0.0, 0.0, 1.0);
@@ -27,22 +46,29 @@ game_update_and_render (GameMemory *memory, GameInput *input, GameBackbuffer *ba
    GameState *gamestate = (GameState*)memory->permanent_storage;
    assert(sizeof(gamestate) <= memory->permanent_storage_size);
 
-   // If in editor mode the user creates an tilegrid. We should start from the mouse position
-   // and then the tile count should be dictated by the distance from the initial mouse position
-   // and the end mouse position
-   int start_y = 100;
-   int start_x = 100;
-
    if (!memory->is_initialized) {
+      // If in editor mode the user creates an tilegrid. We should start from the mouse position
+      // and then the tile count should be dictated by the distance from the initial mouse position
+      // and the end mouse position
+      int start_y = 100;
+      int start_x = 100;
+      u32 tile_width = 64;
+      u32 tile_height = 64;
+      u32 tile_count_x = 12;
+      u32 tile_count_y = 8;
       arena_alloc(&gamestate->arena,
                   memory->permanent_storage_size - sizeof(GameState),
                   (u8*)memory->permanent_storage + sizeof(GameState));
-      gamestate->world        = push_struct(&gamestate->arena, World);
 
+      gamestate->world        = push_struct(&gamestate->arena, World);
       World *world            = gamestate->world;
-      world->tilemap          = push_struct(&gamestate->arena, Tilemap);
       world->player           = push_struct(&gamestate->arena, Player);
-      Tilemap *tilemap        = initialize_tilemap(&gamestate->arena, world, 64, 64, 12, 8, 100, 100, traversable_tile_color);
+      Tilemap *tilemap        = initialize_tilemap(&gamestate->arena,
+                                                   tile_width, tile_height,
+                                                   tile_count_x, tile_count_y,
+                                                   start_x, start_y,
+                                                   traversable_tile_color);
+      world->tilemap          = tilemap;
 
       Player *player          = world->player;
       player->tile.grid_pos   = {5, 3};
@@ -132,7 +158,9 @@ game_update_and_render (GameMemory *memory, GameInput *input, GameBackbuffer *ba
             if (tilemap->tiles[i].tilevalue == 1) {
                check_path_queue.pop();
                Tile check_path_tile = check_path_queue.front();
-               Tile *neighbors = get_neighbors_for_tile(&player->tile, NEIGHBOR_COUNT);
+               Tile *neighbors = get_neighbors_for_tile(&gamestate->arena,
+                                                        &player->tile,
+                                                        NEIGHBOR_COUNT);
                for (int i = 0; i <= NEIGHBOR_COUNT - 1; ++i) {
                   Tile next_tile_in_path = neighbors[i];
                   if (next_tile_in_path.grid_pos == check_path_tile.grid_pos) {
@@ -140,12 +168,12 @@ game_update_and_render (GameMemory *memory, GameInput *input, GameBackbuffer *ba
                      break;
                   }
                }
+               free(neighbors);
             }
          }
       }
    }
    update_tile(tilemap, player->tile.grid_pos, player_tile_color);
-
    // @Speed: We loop through the three times
    draw_tilemap(backbuffer, tilemap);
 

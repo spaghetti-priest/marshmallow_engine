@@ -4,11 +4,12 @@
 #define TILE_COUNT_Y 8
 
 inline Tile
-get_tile (s32 x, s32 y, V4 color, V2S thickness, s32 tile_x, s32 tile_y, int tilevalue)
+get_tile (s32 x, s32 y, s32 tile_width, s32 tile_height, V4 color, V2S thickness,
+          s32 tile_x, s32 tile_y, int tilevalue)
 {
    Tile new_tile        = {};
    new_tile.min         = v2s(x, y);
-   new_tile.max         = v2s((x + TILE_WIDTH) - thickness.x, (y + TILE_HEIGHT) - thickness.y);
+   new_tile.max         = v2s((x + tile_width) - thickness.x, (y + tile_height) - thickness.y);
    new_tile.color       = color;
    new_tile.grid_pos.x  = tile_x;
    new_tile.grid_pos.y  = tile_y;
@@ -17,11 +18,12 @@ get_tile (s32 x, s32 y, V4 color, V2S thickness, s32 tile_x, s32 tile_y, int til
 }
 
 inline Tile
-get_tile (s32 x, s32 y, f32 r, f32 g, f32 b, f32 a, V2S thickness, s32 tile_x, s32 tile_y, int tilevalue)
+get_tile (s32 x, s32 y, s32 tile_width, s32 tile_height, f32 r, f32 g, f32 b, f32 a,
+          V2S thickness, s32 tile_x, s32 tile_y, int tilevalue)
 {
    Tile new_tile        = {};
    new_tile.min         = v2s(x, y);
-   new_tile.max         = v2s((x + TILE_WIDTH) - thickness.x, (y + TILE_HEIGHT) - thickness.y);
+   new_tile.max         = v2s((x + tile_width) - thickness.x, (y + tile_height) - thickness.y);
    new_tile.color       = v4(r, g, b, a);
    new_tile.grid_pos.x  = tile_x;
    new_tile.grid_pos.y  = tile_y;
@@ -45,7 +47,7 @@ update_tile (Tilemap *tilemap, s32 tile_x, s32 tile_y, V4 color)
    tilemap->tiles[tile_index].color = color;
 }
 
-inline void
+function void
 update_tile (Tilemap *tilemap, V2S pos, V4 color)
 {
    assert(tilemap);
@@ -74,7 +76,7 @@ get_tilevalue (Tilemap *tilemap, s32 tile_x, s32 tile_y)
 }
 
 // @Cleanup: Change from color to the tilevalue map
-inline void
+function void
 set_tilevalue(Tilemap *tilemap, s32 tile_x, s32 tile_y, int tilevalue, V4 color)
 {
    assert(tilemap);
@@ -89,11 +91,10 @@ set_tilevalue(Tilemap *tilemap, s32 tile_x, s32 tile_y, int tilevalue, V4 color)
 // @Implementation: If the user creates a tilemap the editor should determine where the tilemap starts by the direction of the vector of the mouse
 // So if the direction vector is +X +Y, the (0,0) of the tilemap should be at the bottom right and if +X, -Y, it should start at the top-right hmm...
 function Tilemap*
-initialize_tilemap (MemoryArena *arena, World *world, u32 tile_width, u32 tile_height, u32 tile_count_x,
-                    u32 tile_count_y, int start_x, int start_y, V4 color)
+initialize_tilemap (MemoryArena *arena, s32 tile_width, s32 tile_height,
+                   u32 tile_count_x, u32 tile_count_y, int start_x, int start_y, V4 color)
 {
-   Tilemap *res        = world->tilemap;
-   // Tilemap *res        = push_struct(arena, Tilemap);
+   Tilemap *res        = push_struct(arena, Tilemap);
    res->tile_width     = tile_width;
    res->tile_height    = tile_height;
    res->tile_count_x   = tile_count_x;
@@ -105,20 +106,21 @@ initialize_tilemap (MemoryArena *arena, World *world, u32 tile_width, u32 tile_h
       for (u32 x = 0; x <= tile_count_x - 1; ++x) {
          u32 current_tile_id           = y * tile_count_x + x;
          res->tiles[current_tile_id]   = get_tile(start_x, start_y,
+                                                  tile_width, tile_height,
                                                   color, v2s(2, 2),
                                                   x, y,
                                                   1); // Make all of the tiles traversaable at init time
-         start_x += TILE_WIDTH;
+         start_x += tile_width;
       }
-      start_y += TILE_HEIGHT;
+      start_y += tile_height;
       start_x = initial_start_x;
    }
 
    return res;
 }
 
-inline Tile*
-get_neighbors_for_tile (Tile *tile,  u32 neighbor_count)
+function Tile*
+get_neighbors_for_tile (MemoryArena *arena, Tile *tile, u32 neighbor_count)
 {
    // @Incomplete: The neighbor count should always either equal 2, 4, 6, or 8 directions
    // @Incomplete: Check the if any of the neighbors are outside of the tilemap bounds
@@ -126,7 +128,7 @@ get_neighbors_for_tile (Tile *tile,  u32 neighbor_count)
    // @Cleanup: Create a dir struct that resembles the position + 1 and loop over the neighbors
    // array. This is much more simplier and can allow us to check if the neighbor tile is out of bounds
    Tile *neighbors       = (Tile*)malloc(sizeof(Tile) * neighbor_count);
-
+   // Tile *neighbors       = push_array(arena, neighbor_count, Tile);
    neighbors[0].grid_pos = {tile->grid_pos.x - 1,     tile->grid_pos.y};      // left
    neighbors[1].grid_pos = {tile->grid_pos.x + 1,     tile->grid_pos.y};      // right
    neighbors[2].grid_pos = {tile->grid_pos.x,         tile->grid_pos.y - 1};  // top
@@ -139,3 +141,46 @@ get_neighbors_for_tile (Tile *tile,  u32 neighbor_count)
 
    return neighbors;
 }
+
+function void
+draw_tile (GameBackbuffer *buffer, Tile *tile)
+{
+   assert(tile && buffer);
+   debug_draw_rect(buffer, tile->min, tile->max, tile->color.x, tile->color.y, tile->color.z, tile->color.w);
+}
+
+function void
+debug_draw_tile_test(GameBackbuffer *buffer, V2 min, V2 max, V4 color)
+{
+   assert(buffer);
+   Tile test = {};
+
+   gl_push_quad(min, max, test.color);
+   // gl_push_quad(buffer, tile->min, tile->max, tile->color.x, tile->color.y, tile->color.z, tile->color.w);
+}
+
+function void
+clear_tilemap(GameBackbuffer *buffer, Tilemap *tilemap, V4 color)
+{
+   // @Speed: Instead of clearing the entire tilemap. Just clear the tiles that arent being affected
+   // OR just have a tilemap dirty flag for the tiles that have being marked for update then draw those
+   for (int y = 0; y <= TILE_COUNT_Y; ++y) {
+      for (int x = 0; x <= TILE_COUNT_X; ++x) {
+         update_tile(tilemap, x, y, color);
+      }
+   }
+}
+
+function void
+draw_tilemap (GameBackbuffer *buffer, Tilemap *tilemap)
+{
+   for (int y = 0; y <= TILE_COUNT_Y; ++y) {
+      for (int x = 0; x <= TILE_COUNT_X; ++x) {
+         // @Speed: Instead of clearing the entire tilemap. Just clear the tiles that arent being affected
+         // OR just have a tilemap dirty flag for the tiles that have being marked for update then draw those
+         u32 tile_index = y * TILE_COUNT_X + x;
+         draw_tile(buffer, &tilemap->tiles[tile_index]);
+      }
+   }
+}
+

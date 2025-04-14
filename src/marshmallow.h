@@ -1,12 +1,11 @@
 #ifndef MARSHMALLOW_H
 #define MARSHMALLOW_H
-#include "marshmallow_tile.h"
 
-typedef struct Player {
-   V2 pos;
-   Tile tile;
-   Tile *next;
-} Player;
+// typedef struct Player {
+//    V2 pos;
+//    Tile tile;
+//    Tile *next;
+// } Player;
 
 typedef struct Camera {
    V2 pos;
@@ -19,22 +18,22 @@ typedef struct MemoryArena
    size_t  used;
 } MemoryArena;
 
-typedef struct World {
-   Tilemap *tilemap;
-   Player *player;
-} World;
+// typedef struct World {
+//    Tilemap *tilemap;
+//    Player *player;
+// } World;
 
 enum GameModes {
    EDITOR_MODE,
    RUNTIME_MODE,
 };
 
-typedef struct GameState {
-   MemoryArena arena;
-   World *world;
-   void *thing1;
-   GameModes game_modes;
-} GameState;
+// typedef struct GameState {
+//    MemoryArena arena;
+//    World *world;
+//    void *thing1;
+//    GameModes game_modes;
+// } GameState;
 
 /*
 ====================================
