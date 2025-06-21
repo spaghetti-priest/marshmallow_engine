@@ -158,6 +158,17 @@ inline v3 perspective_divide(v3 a) {
 	return a;
 }*/
 
+
+typedef union V3S V3S;
+union V3S {
+	struct
+	{
+		s32 x, y, z;
+	};
+	s32 e[3];
+};
+
+inline V3S v3s(s32 x, s32 y, s32 z) {V3S r = {x, y, z,}; return r;}
 /*************************************************************************
 *
 * VECTOR 4 DEFINITIONS AND FUNCTIONS
@@ -496,8 +507,8 @@ manhattan_distance (int x0, int y0, int x1, int y1, int scale = 1)
 inline u32
 euclidean_distance (int x0, int y0, int x1, int y1, int scale = 1)
 {
-   s32 ex = pow((x1 - x0), 2);
-   s32 ey = pow((y1 - y0), 2);
+   s32 ex = (s32)pow((x1 - x0), 2);
+   s32 ey = (s32)pow((y1 - y0), 2);
    return scale * sqrt(ex + ey);
 }
 
@@ -510,7 +521,7 @@ chebyshev_distance (V2S p0, V2S p1, int scale = 1)
    s32 D2 = scale;
    s32 cx = abs(p0.x - p1.x);
    s32 cy = abs(p0.y - p1.y);
-   return D1 * (cx + cy) + (D2 - 2 * D1) * min(cx, cy);
+   return D1 * (cx + cy) + (D2 - 2 * D1) * MIN(cx, cy);
 }
 
 inline s32

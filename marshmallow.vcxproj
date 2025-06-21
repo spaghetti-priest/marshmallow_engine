@@ -105,12 +105,12 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\VulkanSDK\1.4.309.0\Include;C:\marshmallow\extern\openal-soft\include;C:\marshmallow\extern\SDL2\include;C:\marshmallow\extern;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\marshmallow\extern\assimp\include;C:\VulkanSDK\1.4.309.0\Include;C:\marshmallow\extern\openal-soft\include;C:\marshmallow\extern\SDL2\include;C:\marshmallow\extern;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>SDL2.lib;SDL2main.lib;opengl32.lib;OpenAL32.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL2.lib;SDL2main.lib;opengl32.lib;OpenAL32.lib;vulkan-1.lib;assimp-vc143-mtd.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>C:\marshmallow\extern;C:\VulkanSDK\1.4.309.0\Lib;C:\marshmallow\extern\openal-soft\build\Release;C:\marshmallow\extern\SDL2\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <IgnoreSpecificDefaultLibraries>msvcrt.lib</IgnoreSpecificDefaultLibraries>
@@ -137,6 +137,9 @@
     <ClCompile Include="src\marshmallow.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="src\marshmallow_asset.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="src\marshmallow_draw.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
@@ -152,7 +155,11 @@
     <ClCompile Include="src\sdl_marshmallow.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="extern\stb_image.h" />
+    <ClInclude Include="extern\tinygltf\json.hpp" />
+    <ClInclude Include="extern\tinygltf\tiny_gltf.h" />
     <ClInclude Include="src\marshmallow.h" />
+    <ClInclude Include="src\marshmallow_asset.h" />
     <ClInclude Include="src\marshmallow_base.h" />
     <ClInclude Include="src\marshmallow_draw.h" />
     <ClInclude Include="src\marshmallow_gl.h" />

@@ -49,9 +49,15 @@ typedef struct ButtonState {
    bool        button_double_pressed;
 } ButtonState;
 
-typedef struct GameInput {
-   V2 mouse_pos;
+typedef struct MouseState {
+   V2S   pos;
+   V2S   vel;
+   u32   window_id;
    float wheel_data;
+} MouseState;
+
+typedef struct GameInput {
+   MouseState mouse_state;
    /*union {
       struct {
          //@Incomplete: This only has the mouse button keys
@@ -64,13 +70,24 @@ typedef struct GameInput {
       ButtonState mouse_button[5];
    };*/
    bool left_button_pressed;
-   bool q_button_pressed;
    bool left_button_double_pressed;
    bool editor_button_pressed;
    bool right_button_pressed;
    bool right_bracket_pressed;
 
+   bool w_pressed;
+   bool a_pressed;
+   bool s_pressed;
+   bool d_pressed;
+   bool spacebar_pressed;
+   bool left_control_pressed;
+
+   bool q_button_pressed;
+
 } GameInput;
+
+// #define DEBUG_PLATFORM_FREE_FILE_MEMORY(name) void name(void *Memory, Thread_Context *Thread)
+// typedef DEBUG_PLATFORM_FREE_FILE_MEMORY(debug_platform_free_file_memory);
 
 typedef struct GameBackbuffer {
    u32 w;

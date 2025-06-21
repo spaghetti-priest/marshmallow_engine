@@ -27,9 +27,13 @@ typedef struct MarshFile {
   u32 size;
 } MarshFile;
 
+// @Compile-Error: SDL already reserves the function keyword here so
+// we use static for now
 static MarshFile debug_read_file(const char *filename);
+static MarshFile debug_read_null_terminated_file(const char *filename);
 static bool debug_write_file(MarshFile *file, const char *filename);
 static bool debug_list_all_directories(const char *dirname);
+
 
 #define SDL_MARSHMALLOW_H
 #endif

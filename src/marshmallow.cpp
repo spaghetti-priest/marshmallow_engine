@@ -1,40 +1,52 @@
+// #define TINYGLTF_IMPLEMENTATION
+// #define TINYGLTF_NO_STB_IMAGE
+
+//#ifdef (WIN32)
+//#define STBI_WINDOWS_UTF8
+//#endif
+
+// @Temporary: Should this be moved to marshmallow_gl
+// #include "tinygltf/tiny_gltf.h"
+
 #include "marshmallow.h"
 #include "marshmallow_draw.h"
 #include "marshmallow_draw.cpp"
 #include "marshmallow_tile.h"
 #include "marshmallow_tile.cpp"
+#include "marshmallow_asset.h"
+#include "marshmallow_asset.cpp"
 
 typedef struct Player {
-   V2 pos;
-   Tile tile;
-   Tile *next;
+   V2    pos;
+   Tile  tile;
+   Tile  *next;
 } Player;
 
 typedef struct World {
-   Tilemap *tilemap;
-   Player *player;
+   Tilemap  *tilemap;
+   Player   *player;
 } World;
 
 typedef struct GameState {
-   MemoryArena arena;
-   World *world;
-   void *thing1;
-   GameModes game_modes;
+   Arena arena; // @Cleanup: Might change this into arena
+   World       *world;
+   void        *thing1;
+   GameModes   game_modes;
 } GameState;
 
 // @Cleanup: Make this into an enum or table
-V4 RED      = v4(1.0, 0.0, 0.0, 1.0);
-V4 GREEN    = v4(0.0, 1.0, 0.0, 1.0);
-V4 BLUE     = v4(0.0, 0.0, 1.0, 1.0);
-V4 YELLOW   = v4(1.0, 1.0, 0.0, 1.0);
-V4 WHITE    = v4(1.0, 1.0, 1.0, 1.0);
-V4 GRAY     = v4(0.5, 0.5, 0.5, 0.5);
+V4 RED      = v4(1.0f, 0.0f, 0.0f, 1.0f);
+V4 GREEN    = v4(0.0f, 1.0f, 0.0f, 1.0f);
+V4 BLUE     = v4(0.0f, 0.0f, 1.0f, 1.0f);
+V4 YELLOW   = v4(1.0f, 1.0f, 0.0f, 1.0f);
+V4 WHITE    = v4(1.0f, 1.0f, 1.0f, 1.0f);
+V4 GRAY     = v4(0.5f, 0.5f, 0.5f, 0.5f);
 
-global_variable V4 player_tile_color       = v4(1.0, 1.0, 0.0, 1.0);
-global_variable V4 traversable_tile_color  = v4(1.0, 0.0, 0.5, 0.0);
-global_variable V4 boundry_tile_color      = v4(0.7, 0.7, 0.7, 1.0);
-global_variable V4 click_tile_color        = v4(0.0, 1.0, 0.0, 1.0);
-global_variable V4 highlight_tile_color    = v4(1.0, 1.0, 1.0, 1.0);
+global_variable V4 player_tile_color       = v4(1.0f, 1.0f, 0.0f, 1.0f);
+global_variable V4 traversable_tile_color  = v4(1.0f, 0.0f, 0.5f, 0.0f);
+global_variable V4 boundry_tile_color      = v4(0.7f, 0.7f, 0.7f, 1.0f);
+global_variable V4 click_tile_color        = v4(0.0f, 1.0f, 0.0f, 1.0f);
+global_variable V4 highlight_tile_color    = v4(1.0f, 1.0f, 1.0f, 1.0f);
 
 std::queue<Tile> check_path_queue;
 std::queue<Tile> display_path_queue;
@@ -50,12 +62,13 @@ game_update_and_render (GameMemory *memory, GameInput *input, GameBackbuffer *ba
       // If in editor mode the user creates an tilegrid. We should start from the mouse position
       // and then the tile count should be dictated by the distance from the initial mouse position
       // and the end mouse position
-      int start_y = 100;
-      int start_x = 100;
-      u32 tile_width = 64;
-      u32 tile_height = 64;
-      u32 tile_count_x = 12;
-      u32 tile_count_y = 8;
+      int start_y = 0;
+      int start_x = 0;
+      u32 tile_width = 1;
+      u32 tile_height = 1;
+      // @Hardocded: This will be hardcoded to 32 x 32. In the software renderer the whole thing bricks
+      u32 tile_count_x = 32;
+      u32 tile_count_y = 32;
       arena_alloc(&gamestate->arena,
                   memory->permanent_storage_size - sizeof(GameState),
                   (u8*)memory->permanent_storage + sizeof(GameState));
@@ -75,7 +88,12 @@ game_update_and_render (GameMemory *memory, GameInput *input, GameBackbuffer *ba
       player->tile.color      = player_tile_color;
       player->tile.tilevalue  = 2;
 
+      // bool s = asset_load_gltf_model("C:\\marshmallow\\extern\\tinygltf\\models\\Cube\\Cube.gltf");
+      //Model cube_gltf{};
+      bool s = asset_load_gltf_model(&gamestate->arena, &cube_gltf, "C:\\marshmallow\\extern\\tinygltf\\models\\Cube\\Cube.gltf");
+
       memory->is_initialized  = true;
+      debug_push_tilemap_instanced(backbuffer, tilemap);
    }
 
    // @Todo: Create a function that draws a rectangle outline
@@ -100,7 +118,7 @@ game_update_and_render (GameMemory *memory, GameInput *input, GameBackbuffer *ba
 
    Tile dest_tile       = {};
    dest_tile.grid_pos   = {2, 6};
-   dest_tile.color      = v4(0.2, 0.5, 0.5, 0.0);
+   dest_tile.color      = v4(0.2f, 0.5f, 0.5f, 0.0f);
    dest_tile.tilevalue  = 1;
 
    // @Speed: We loop through the tilemap three times
@@ -118,11 +136,12 @@ game_update_and_render (GameMemory *memory, GameInput *input, GameBackbuffer *ba
 /*****************************************************
 *  Process Inputs
 *****************************************************/
-   for (int i = 0; i <= TILE_COUNT_Y * TILE_COUNT_X; ++i) {
+#if 0
+   for (int i = 0; i <= tilemap->tile_count_y * tilemap->tile_count_x; ++i) {
       Tile mouse_tile = tilemap->tiles[i];
 
-      if ((input->mouse_pos.x >= mouse_tile.min.x && input->mouse_pos.x <= mouse_tile.max.x)
-      &&  (input->mouse_pos.y >= mouse_tile.min.y && input->mouse_pos.y <= mouse_tile.max.y)) {
+      if ((input->mouse_state.pos.x >= mouse_tile.min.x && input->mouse_state.pos.x <= mouse_tile.max.x)
+      &&  (input->mouse_state.pos.y >= mouse_tile.min.y && input->mouse_state.pos.y <= mouse_tile.max.y)) {
          s32 chebshev = chebyshev_distance(player->tile.grid_pos, mouse_tile.grid_pos);
 
          // // @TODO (low priority): This could be a bool since we only need the sign bit
@@ -135,8 +154,8 @@ game_update_and_render (GameMemory *memory, GameInput *input, GameBackbuffer *ba
          for (int i = 0; i <= chebshev; ++i) {
             Tile check_path_tile = display_path_queue.back();
             check_path_tile.color = GRAY;
-            if(x_dir > 0) dx = 1;
-            if(y_dir > 0) dy = 1;
+            if (x_dir > 0) dx = 1;
+            if (y_dir > 0) dy = 1;
 
             if (check_path_tile.grid_pos.x != mouse_tile.grid_pos.x) {
                check_path_tile.grid_pos.x += dx;
@@ -173,9 +192,16 @@ game_update_and_render (GameMemory *memory, GameInput *input, GameBackbuffer *ba
          }
       }
    }
+#endif
+
    update_tile(tilemap, player->tile.grid_pos, player_tile_color);
    // @Speed: We loop through the three times
-   draw_tilemap(backbuffer, tilemap);
+   debug_push_tilemap_instanced(backbuffer, tilemap);
+
+   // gl_draw_model(&cube_gltf);
+
+   // debug_draw_tilemap(backbuffer, tilemap);
+   // draw_tilemap(backbuffer, tilemap);
 
    return;
 }

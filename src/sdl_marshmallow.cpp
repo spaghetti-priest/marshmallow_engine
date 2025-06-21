@@ -12,20 +12,12 @@
 #include <AL/al.h>
 #include <AL/alc.h>
 
-#define STB_TRUETYPE_IMPLEMENTATION
-#include "stb_truetype.h"
-
-#define STB_IMAGE_IMPLEMENTATION
-
-//#ifdef (WIN32)
-//#define STBI_WINDOWS_UTF8
-//#endif
-
-#include "stb_image.h"
-
 //@Remove:
 #include <queue>
 #include <unordered_map>
+
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "stb_truetype.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include "windows.h"
@@ -59,13 +51,13 @@ typedef double              f64;
 #include "sdl_marshmallow.h"
 #include "marshmallow_base.h"
 
+global_variable const u32 screen_w = 1280;
+global_variable const u32 screen_h = 720;
+
 #include "marshmallow_gl.h"
 #include "marshmallow_gl.cpp"
 
 #include "marshmallow.cpp"
-
-global_variable const u32 screen_w = 1280;
-global_variable const u32 screen_h = 720;
 
 typedef struct Table {
    int key;
@@ -205,6 +197,40 @@ debug_read_file (const char *filename)
    res.contents    = filecontents;
    res.size        = filesize;
    fclose(f);
+   return res;
+}
+
+// @Note: debug_read_file does not check for null termination. So this function
+// exists
+function MarshFile
+debug_read_null_terminated_file (const char *filename)
+{
+   MarshFile res = {};
+   FILE *f = fopen(filename, "rb");
+   const char *strip_name = strrchr(filename, '/');
+
+   if (!f) {
+      printf("[ERROR]: Failed to open file: [%s]\n", strip_name);
+      return res;
+   }
+
+   fseek(f, 0, SEEK_END);
+   u32 filesize = ftell(f);
+   fseek(f, 0, SEEK_SET);
+
+   char *filecontents  = (char*)malloc(sizeof(char*) * filesize + 1);
+   u32 bytes_read      = fread((void*)filecontents, sizeof(char*), filesize, f);
+
+   // if (bytes_read != (filesize / 8)) {
+   //    printf("[ERROR]: Bytes read does not equal total filesize, possibly corrupted file!\n");
+   //    return res;
+   // }
+
+   filecontents[filesize]  = '\0';
+   res.contents            = (void*)filecontents;
+   res.size                = filesize;
+   fclose(f);
+
    return res;
 }
 
@@ -524,10 +550,24 @@ load_wav_file (const char *filename)
    return true;
 }
 
+inline bool
+sdl_get_key_state(SDL_KeyboardEvent *key_event, SDL_Keysym *keysym, SDL_Keycode keycode)
+{
+   bool is_pressed = false;
+   if (keysym->sym == keycode) {
+      if (key_event->state == SDL_PRESSED)
+         is_pressed = true;
+      if (key_event->state == SDL_RELEASED)
+         is_pressed = false;
+   }
+
+   return is_pressed;
+}
+
 function void
 SDL_process_events (SDL_Context *context, GameInput *input)
 {
-   while(SDL_PollEvent(context->event))
+   while (SDL_PollEvent(context->event))
    {
       u32 event_type = context->event->type;
       switch(event_type)
@@ -540,7 +580,7 @@ SDL_process_events (SDL_Context *context, GameInput *input)
          case SDL_WINDOWEVENT:
          {
             SDL_WindowEvent window = context->event->window;
-            if (window.event == SDL_WINDOWEVENT_CLOSE &&
+            if(window.event == SDL_WINDOWEVENT_CLOSE &&
                window.windowID == SDL_GetWindowID(context->window)){
                context->running = false;
             }
@@ -549,16 +589,16 @@ SDL_process_events (SDL_Context *context, GameInput *input)
          case SDL_KEYUP:
          case SDL_KEYDOWN:
          {
-            SDL_KeyboardEvent key_event  = context->event->key;
-            SDL_Keysym key_code          = context->event->key.keysym;
-            if (key_code.sym == 'w')
-               printf("W pressed\n");
-            if (key_code.sym == 'a')
-               printf("A pressed\n");
-            if (key_code.sym == 's')
-               printf("S pressed\n");
-            if (key_code.sym == 'd')
-               printf("D pressed\n");
+            SDL_KeyboardEvent key_event   = context->event->key;
+            SDL_Keysym key_code           = context->event->key.keysym;
+
+            input->w_pressed              = sdl_get_key_state(&key_event, &key_code, SDLK_w);
+            input->a_pressed              = sdl_get_key_state(&key_event, &key_code, SDLK_a);
+            input->s_pressed              = sdl_get_key_state(&key_event, &key_code, SDLK_s);
+            input->d_pressed              = sdl_get_key_state(&key_event, &key_code, SDLK_d);
+            input->spacebar_pressed       = sdl_get_key_state(&key_event, &key_code, SDLK_SPACE);
+            input->left_control_pressed   = sdl_get_key_state(&key_event, &key_code, SDLK_LCTRL);
+
             if (key_code.sym == (SDLK_e)) {
                if(key_event.type == SDL_KEYDOWN) {
                   if (input->editor_button_pressed) {
@@ -568,11 +608,30 @@ SDL_process_events (SDL_Context *context, GameInput *input)
                   }
                }
             }
+
             if (key_code.sym == SDLK_ESCAPE)
                context->running = false;
          } break;
 
          case SDL_MOUSEMOTION:
+         {
+            SDL_MouseMotionEvent mouse_motion_event   = context->event->motion;
+            input->mouse_state.pos.x                  = mouse_motion_event.x;
+            input->mouse_state.pos.y                  = mouse_motion_event.y;
+            input->mouse_state.window_id              = mouse_motion_event.windowID;
+            // @Bug: https://github.com/libsdl-org/SDL/issues/3701
+            // SDL relative mouse motion sometimes reports negative values even when
+            // the mouse is immobile
+            input->mouse_state.vel.x                  = mouse_motion_event.xrel;
+            input->mouse_state.vel.y                  = mouse_motion_event.yrel;
+         } break;
+
+         case SDL_MOUSEWHEEL:
+         {
+            SDL_MouseWheelEvent mouse_wheel_event  = context->event->wheel;
+            input->mouse_state.wheel_data          = mouse_wheel_event.preciseY;
+         } break;
+
          case SDL_MOUSEBUTTONDOWN:
          case SDL_MOUSEBUTTONUP:
          {
@@ -656,7 +715,7 @@ int main (int argc, char **argv)
 
    u64 start_time             = 0, current_time = 0;
    u64 frame_counter          = 0;
-   float fps                  = SDL_get_tick_value();
+   float fps                  = (float)SDL_get_tick_value();
    // float fps               = SDL_get_performance_count();
    float cap_fps              = 0;
    u64 performace_frequency   = SDL_GetPerformanceFrequency();
@@ -664,15 +723,26 @@ int main (int argc, char **argv)
    SYSTEM_INFO    sysInfo;
    GetSystemInfo(&sysInfo);
 
-   MarshFile file = debug_read_file("C:\\Windows\\Fonts\\cambriab.ttf");
+   // bool success = vulkan_init(window);
+   bool success = init_sdl_opengl(window, screen_w, screen_h);
+   bool init_mouse = true;
+
    stbtt_fontinfo font_info;
-   char codepoint = 'S';
-   unsigned char *bitmap = 0;
-   int font_w = 0, font_h = 0, font_xoff = 0, font_yoff = 0;
+   // stbtt_bakedchar ascii_table[96]; //space to del
+
+   unsigned char *temp_bitmap = (unsigned char *)malloc(sizeof(unsigned char) * (512 * 512));
+   unsigned char *ttf_buffer  = (unsigned char *)malloc(sizeof(unsigned char) * (1 << 20));
+   stbtt_bakedchar *ascii_table = (stbtt_bakedchar*)malloc(sizeof(stbtt_bakedchar) * 96);
+
+   MarshFile file = debug_read_file("C:\\Windows\\Fonts\\arial.ttf");
+   // char codepoint = 'S';
+   int font_w = 512, font_h = 512, font_xoff = 0, font_yoff = 0;
 
    stbtt_InitFont(&font_info, (u8*)file.contents, 0);
-   bitmap = stbtt_GetCodepointBitmap(&font_info, 0, stbtt_ScaleForPixelHeight(&font_info, 32), codepoint, &font_w, &font_h, &font_xoff, &font_yoff);
-   stbtt_FreeBitmap(bitmap, font_info.userdata);
+   stbtt_BakeFontBitmap(font_info.data, font_info.fontstart, 32, temp_bitmap, font_w, font_h, 32, 96, ascii_table);
+   gl_init_font_texture(temp_bitmap, font_w, font_h);
+
+   // Audio Driver Stuff
    {
       ALCdevice *device;
       ALboolean enumeration;
@@ -693,17 +763,15 @@ int main (int argc, char **argv)
       }
    }
 
-   // bool success = vulkan_init(window);
-   bool success = init_opengl(window, screen_w, screen_h);
-
    // bool s = load_wav_file("C:\\marshmallow\\data\\searching_the_past.wav");
+
    while (context.running)
    {
       u64 fps_start_counter = SDL_get_performance_count();
 
       // @Todo: FPS is broken because it continously increases over time rather than reflecting the average frames rendered in one second. elapsed MS is more accurate
-      float cap_fps = SDL_get_tick_value();
-      float avgfps = frame_counter / ((float)SDL_get_seconds_elapsed(fps, SDL_get_tick_value()) / 1000.0f);
+      float cap_fps  = SDL_get_tick_value();
+      float avgfps   = frame_counter / ((float)SDL_get_seconds_elapsed(fps, SDL_get_tick_value()) / 1000.0f);
       if (avgfps > 2000000) avgfps = 0.0;
 
       SDL_process_events(&context, &input);
@@ -726,19 +794,20 @@ int main (int argc, char **argv)
       global_backbuffer.pixels         = backbuffer.pixels;
       global_backbuffer.bytes_pp       = backbuffer.bytes_pp;
 
-      int x, y;
-      SDL_GetMouseState(&x, &y);
-      input.mouse_pos.x = x;
-      input.mouse_pos.y = y;
-
+      gl_begin_frame();
 
       if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) {
          SDL_Delay(10);
          continue;
       }
 
-      // game_update_and_render(&game_memory, &input, &global_backbuffer);
-      gl_render_frame();
+      char text[256];
+      _snprintf_s(text, sizeof(text), "Behold! The miracle of ressurection!");
+
+       //marshmallow_print(text, 0, 720, v4(1.0, 1.0, 1.0, 1.0), ascii_table);
+
+      game_update_and_render(&game_memory, &input, &global_backbuffer);
+      gl_render_frame(init_mouse, &input);
 
 // @Depreciated: software renderer
 #if 0
@@ -761,6 +830,7 @@ int main (int argc, char **argv)
    gl_cleanup();
    SDL_DestroyWindow(window);
    SDL_Quit();
+   stbtt_FreeBitmap(temp_bitmap, font_info.userdata);
 
 	return 0;
 }
