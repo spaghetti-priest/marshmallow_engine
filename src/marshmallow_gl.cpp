@@ -27,19 +27,13 @@ typedef struct MeshVertex {
    V2 texcoord;
 } MeshVertex;
 
-typedef struct Shader {
-   u32 vertex_shader;
-   u32 frag_shader;
-   u32 compute_shader;
-   u32 program_id;
-} Shader;
-
 SDL_GLContext gl_context;
 
-u32 triangle_shader;
-u32 debug_screen_space_shader;
-u32 text_shader;
-u32 scene_shader;
+Shader triangle_shader;
+Shader debug_screen_space_shader;
+Shader text_shader;
+Shader scene_shader;
+Shader cube_shader;
 
 global_variable Model cube_gltf{};
 
@@ -131,9 +125,10 @@ compile_shader (const char *filename, GLenum type)
    return shader;
 }
 
-function GLuint
+function Shader
 gl_create_shader_program (const char *vertex_path, const char *frag_path)
 {
+   Shader new_shader;
    int success;
    char error_buf[1024];
 
@@ -164,7 +159,8 @@ gl_create_shader_program (const char *vertex_path, const char *frag_path)
    glDeleteShader(vertex_shader);
    glDeleteShader(frag_shader);
 
-   return shader_program;
+   new_shader.id = shader_program;
+   return new_shader;
 }
 
 function u32
@@ -203,6 +199,46 @@ gl_set_uniform_mat4 (GLuint program, const char *name, glm::mat4 value)
    // @Incomplete: This does not work. Fix!!
    glUniformMatrix4fv(glGetUniformLocation(program, name), 1, GL_FALSE, &value[0][0]);
    GLenum err = glGetError();
+}
+
+inline void
+gl_set_vp (Shader *shader)
+{
+   glUseProgram(shader->id);
+   glm::mat4 view    = glm::mat4(1.0f);
+   glm::mat4 proj    = glm::mat4(1.0f);
+
+   view  = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
+   proj  = glm::perspective(glm::radians(45.0f), (float)screen_w/(float)screen_h, 0.1f, 100.0f);
+
+   glUniformMatrix4fv(glGetUniformLocation(shader->id, "view"),  1, GL_FALSE, &view[0][0]);
+   glUniformMatrix4fv(glGetUniformLocation(shader->id, "proj"),  1, GL_FALSE, &proj[0][0]);
+}
+
+inline void
+gl_set_mvp (Shader *shader, float degrees)
+{
+   glUseProgram(shader->id);
+   glm::mat4 model   = glm::mat4(1.0f);
+   glm::mat4 view    = glm::mat4(1.0f);
+   glm::mat4 proj    = glm::mat4(1.0f);
+
+   model = glm::rotate(model, glm::radians(degrees), glm::vec3(1.0f, 0.0f, 0.0f));
+   view  = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
+   proj  = glm::perspective(glm::radians(45.0f), (float)screen_w/(float)screen_h, 0.1f, 100.0f);
+
+   glUniformMatrix4fv(glGetUniformLocation(shader->id, "model"), 1, GL_FALSE, &model[0][0]);
+   glUniformMatrix4fv(glGetUniformLocation(shader->id, "view"),  1, GL_FALSE, &view[0][0]);
+   glUniformMatrix4fv(glGetUniformLocation(shader->id, "proj"),  1, GL_FALSE, &proj[0][0]);
+}
+
+inline void
+gl_set_scale (Shader *shader, glm::vec3 scale)
+{
+   glUseProgram(shader->id);
+   glm::mat4 model   = glm::mat4(1.0f);
+   model             = glm::scale(model, scale);
+   glUniformMatrix4fv(glGetUniformLocation(shader->id, "model"), 1, GL_FALSE, &model[0][0]);
 }
 
 /***************************************************************************************
@@ -257,7 +293,7 @@ gl_initialize_mesh_buffers (Mesh *mesh)
 function void
 gl_draw_model (Model *model)
 {
-   glUseProgram(scene_shader);
+   glUseProgram(scene_shader.id);
 
    glm::mat4 model_space = glm::mat4(1.0f);
    glm::mat4 proj    = glm::mat4(1.0f);
@@ -268,9 +304,9 @@ gl_draw_model (Model *model)
    proj        = glm::perspective(glm::radians(45.0f), (float)screen_w/(float)screen_h, 0.1f, 100.0f);
    view        = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
 
-   glUniformMatrix4fv(glGetUniformLocation(scene_shader, "model"), 1, GL_FALSE, &model_space[0][0]);
-   glUniformMatrix4fv(glGetUniformLocation(scene_shader, "view"),  1, GL_FALSE, &view[0][0]);
-   glUniformMatrix4fv(glGetUniformLocation(scene_shader, "proj"),  1, GL_FALSE, &proj[0][0]);
+   glUniformMatrix4fv(glGetUniformLocation(scene_shader.id, "model"), 1, GL_FALSE, &model_space[0][0]);
+   glUniformMatrix4fv(glGetUniformLocation(scene_shader.id, "view"),  1, GL_FALSE, &view[0][0]);
+   glUniformMatrix4fv(glGetUniformLocation(scene_shader.id, "proj"),  1, GL_FALSE, &proj[0][0]);
 
    for (u16 i = 0; i < model->meshes.size(); ++i) {
       Mesh *mesh = &model->meshes[i];
@@ -290,7 +326,7 @@ gl_draw_model (Model *model)
          else if (name == "texture_specular") number = std::to_string(specular++);
          else if (name == "texture_normal")   number = std::to_string(normal++);
          else if (name == "texture_height")   number = std::to_string(height++);
-         glUniform1i(glGetUniformLocation(scene_shader, (name + number).c_str()), i);
+         glUniform1i(glGetUniformLocation(scene_shader.id, (name + number).c_str()), i);
          glBindTexture(GL_TEXTURE_2D, mesh->textures[i].id);
       }
 
@@ -300,11 +336,6 @@ gl_draw_model (Model *model)
 
       glActiveTexture(GL_TEXTURE0);
    }
-}
-
-function void
-gl_push_cube()
-{
 }
 
 u32 quad_instance_vbo = 0;
@@ -422,6 +453,106 @@ gl_draw_quad ()
 
 }
 
+BufferObject cube_mesh{};
+const u32 cube_instance_count = 1;
+V3S cube_translations[cube_instance_count] = {v3s(8.0f, 2.0f, -4.0f)};//,
+                                              // v3s(4.0f, 2.2f, -4.5f),
+                                              // v3s(12.0f, 2.2f, -4.5f)};
+
+// @Note: Despite the name. This function can draw multiple cubes. It should
+// be called gl_push_cube_instanced for preciseness
+function void
+gl_push_cube (V3S *positions, u32 instance_count, V4 color)
+{
+   const u32 debug_vertex_count_cube = 36;
+   MeshVertex debug_cube[debug_vertex_count_cube];
+   // back face ?
+   debug_cube[0] = {{-1.0f, -1.0f, -1.0f},  color}; // bottom-left
+   debug_cube[1] = {{1.0f,  1.0f, -1.0f},  color}; // top-right
+   debug_cube[2] = {{1.0f, -1.0f, -1.0f},  color}; // bottom-right
+   debug_cube[3] = {{1.0f,  1.0f, -1.0f},  color}; // top-right
+   debug_cube[4] = {{-1.0f, -1.0f, -1.0f},  color}; // bottom-left
+   debug_cube[5] = {{-1.0f,  1.0f, -1.0f},  color}; // top-left
+   // front face
+   debug_cube[6] = {{-1.0f, -1.0f,  1.0f},  color}; // bottom-left
+   debug_cube[7] = {{1.0f, -1.0f,  1.0f},  color}; // bottom-right
+   debug_cube[8] = {{1.0f,  1.0f,  1.0f},  color}; // top-right
+   debug_cube[9] = {{1.0f,  1.0f,  1.0f},  color}; // top-right
+   debug_cube[10] = {{-1.0f,  1.0f,  1.0f},  color}; // top-left
+   debug_cube[11] = {{-1.0f, -1.0f,  1.0f},  color}; // bottom-left
+   // left face
+   debug_cube[12] = {{-1.0f,  1.0f,  1.0f}, color}; // top-right
+   debug_cube[13] = {{-1.0f,  1.0f, -1.0f}, color}; // top-left
+   debug_cube[14] = {{-1.0f, -1.0f, -1.0f}, color}; // bottom-left
+   debug_cube[15] = {{-1.0f, -1.0f, -1.0f}, color}; // bottom-left
+   debug_cube[16] = {{-1.0f, -1.0f,  1.0f}, color}; // bottom-right
+   debug_cube[17] = {{-1.0f,  1.0f,  1.0f}, color}; // top-right
+   // right face
+   debug_cube[18] = {{1.0f,  1.0f,  1.0f}, color}; // top-left
+   debug_cube[19] = {{1.0f, -1.0f, -1.0f}, color}; // bottom-right
+   debug_cube[20] = {{1.0f,  1.0f, -1.0f}, color}; // top-right
+   debug_cube[21] = {{1.0f, -1.0f, -1.0f}, color}; // bottom-right
+   debug_cube[22] = {{1.0f,  1.0f,  1.0f}, color}; // top-left
+   debug_cube[23] = {{1.0f, -1.0f,  1.0f}, color}; // bottom-left
+   // bottom face
+   debug_cube[24] = {{-1.0f, -1.0f, -1.0f},  color}; // top-right
+   debug_cube[25] = {{1.0f, -1.0f, -1.0f},  color}; // top-left
+   debug_cube[26] = {{1.0f, -1.0f,  1.0f},  color}; // bottom-left
+   debug_cube[27] = {{1.0f, -1.0f,  1.0f},  color}; // bottom-left
+   debug_cube[28] = {{-1.0f, -1.0f,  1.0f},  color}; // bottom-right
+   debug_cube[29] = {{-1.0f, -1.0f, -1.0f},  color}; // top-right
+   // top face
+   debug_cube[30] = {{-1.0f,  1.0f, -1.0f}, color}; // top-left
+   debug_cube[31] = {{1.0f,  1.0f , 1.0f},  color}; // bottom-right
+   debug_cube[32] = {{1.0f,  1.0f, -1.0f},  color}; // top-right
+   debug_cube[33] = {{1.0f,  1.0f,  1.0f},  color}; // bottom-right
+   debug_cube[34] = {{-1.0f,  1.0f, -1.0f}, color}; // top-left
+   debug_cube[35] = {{-1.0f,  1.0f,  1.0f}, color};  // bottom-left
+
+   // @Incomplete: This mesh instance VBO is only for position
+   // We might be able to implement different colors here aswell
+   glGenBuffers(1, &cube_mesh.instance_vbo);
+   glBindBuffer(GL_ARRAY_BUFFER, cube_mesh.instance_vbo);
+   glBufferData(GL_ARRAY_BUFFER, sizeof(V3) * instance_count, &positions[0], GL_STATIC_DRAW);
+   glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+   glGenVertexArrays(1, &cube_mesh.vao);
+   glGenBuffers(1, &cube_mesh.vbo);
+   glBindVertexArray(cube_mesh.vao);
+
+   glBindBuffer(GL_ARRAY_BUFFER, cube_mesh.vbo);
+   glBufferData(GL_ARRAY_BUFFER, sizeof(MeshVertex) * debug_vertex_count_cube, debug_cube, GL_STATIC_DRAW);
+
+   glEnableVertexAttribArray(0); // position
+   glEnableVertexAttribArray(1); // colors
+   glEnableVertexAttribArray(2); // instance
+
+   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, pos));
+   glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, color));
+
+   glBindBuffer(GL_ARRAY_BUFFER, cube_mesh.instance_vbo);
+   glVertexAttribPointer(2, 3, GL_INT, GL_FALSE, sizeof(V3), (void*)0);
+   glBindBuffer(GL_ARRAY_BUFFER, 0);
+   glVertexAttribDivisor(2, 1); // tell OpenGL this is an instanced vertex attribute.
+
+   glBindBuffer(GL_ARRAY_BUFFER, 0);
+   glBindVertexArray(0);
+
+   return;
+}
+
+function void
+gl_draw_cube (Shader *shader)
+{
+   glUseProgram(shader->id);
+   gl_set_mvp(shader, 0.0f);
+
+   glBindVertexArray(cube_mesh.vao);
+   glDrawArraysInstanced(GL_TRIANGLES, 0, 36, cube_instance_count);
+   // glDrawArrays(GL_TRIANGLES, 0 , 36);
+   glBindVertexArray(0);
+}
+
 BufferObject text_obj;
 GLuint font_texture;
 
@@ -457,6 +588,7 @@ gl_init_font_texture (unsigned char *temp_bitmap, int font_w, int font_h)
    glBindVertexArray(0);
 
 }
+
 
 // Make sure this is being rasterized under orthographic projection
 /*
@@ -531,6 +663,12 @@ init_sdl_opengl (SDL_Window *window, u32 screen_w, u32 screen_h)
    glEnable(GL_DEPTH_TEST);
    glEnable(GL_MULTISAMPLE);
 
+   unsigned int indices[index_count] =
+   {
+      0, 2, 1,
+      0, 1, 3
+   };
+
    // @Todo: When the backbuffer is resized the bb should retrieve
    // the new screen w and h
    glViewport(0, 0, screen_w, screen_h);
@@ -543,15 +681,17 @@ init_sdl_opengl (SDL_Window *window, u32 screen_w, u32 screen_h)
    triangle_shader            = gl_create_shader_program("C:/marshmallow/shaders/shader.vert",        "C:/marshmallow/shaders/shader.frag");
    debug_screen_space_shader  = gl_create_shader_program("C:/marshmallow/shaders/debug_shader.vert",  "C:/marshmallow/shaders/debug_shader.frag");
    text_shader                = gl_create_shader_program("C:/marshmallow/shaders/text.vert",          "C:/marshmallow/shaders/text.frag");
+   cube_shader                = gl_create_shader_program("C:/marshmallow/shaders/cube.vert",          "C:/marshmallow/shaders/cube.frag");
 
    const u32 debug_vertex_count = 4;
    MeshVertex debug_vertices[debug_vertex_count];
-   V4 gl_color_blue = v4(1.0f, 0.0f, 1.0f, 1.0f);
+   V4 gl_color_pink = v4(1.0f, 0.0f, 1.0f, 1.0f);
+   V4 gl_color_blue = v4(0.0f, 0.0f, 1.0f, 1.0f);
 
-   debug_vertices[0] = {{1280,  20.0f, 0.0f}, gl_color_blue}; // tr
-   debug_vertices[1] = {{1280,  0.0f,  0.0f}, gl_color_blue}; // br
-   debug_vertices[2] = {{0.0f,  0.0f,  0.0f}, gl_color_blue}; // bl
-   debug_vertices[3] = {{0.0f,  20.0f, 0.0f}, gl_color_blue}; // tl
+   debug_vertices[0] = {{1280,  20.0f, 0.0f}, gl_color_pink}; // tr
+   debug_vertices[1] = {{1280,  0.0f,  0.0f}, gl_color_pink}; // br
+   debug_vertices[2] = {{0.0f,  0.0f,  0.0f}, gl_color_pink}; // bl
+   debug_vertices[3] = {{0.0f,  20.0f, 0.0f}, gl_color_pink}; // tl
 
    glGenVertexArrays(1, &debug_quad.vao);
    glBindVertexArray(debug_quad.vao);
@@ -570,6 +710,10 @@ init_sdl_opengl (SDL_Window *window, u32 screen_w, u32 screen_h)
    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, pos));
    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, color));
 
+   glBindBuffer(GL_ARRAY_BUFFER, 0);
+   glBindVertexArray(0);
+
+   gl_push_cube(cube_translations, 1, gl_color_blue);
    // debug_quad = push_quad_immediate(debug_vertices, debug_vertex_count);
 
    return true;
@@ -594,7 +738,7 @@ gl_render_frame(bool init_mouse, GameInput *input)
    u32 screen_w = 1280;
    u32 screen_h = 720;
    // camera_pos = {}
-   #if 0
+   #if 1
    // Camera position movement
    {
       const float camera_speed = 0.5f;
@@ -654,39 +798,33 @@ gl_render_frame(bool init_mouse, GameInput *input)
    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-   glUseProgram(debug_screen_space_shader);
+   glUseProgram(debug_screen_space_shader.id);
    glm::mat4 ortho_projection = glm::mat4(1.0);
    glm::mat4 ortho_model      = glm::mat4(1.0);
    ortho_projection           = glm::ortho(0.0f, 1280.0f, 0.0f, 720.0f);
-   glUniformMatrix4fv(glGetUniformLocation(debug_screen_space_shader, "orthographic"), 1, GL_FALSE, &ortho_projection[0][0]);
+   glUniformMatrix4fv(glGetUniformLocation(debug_screen_space_shader.id, "orthographic"), 1, GL_FALSE, &ortho_projection[0][0]);
 
    glBindVertexArray(debug_quad.vao);
    // glDrawElementsInstanced(GL_TRIANGLES, index_count, GL_UNSIGNED_INT, 0, instance_count);
    glDrawElements(GL_TRIANGLES, index_count, GL_UNSIGNED_INT, 0);
    glBindVertexArray(0);
 
-   glUseProgram(triangle_shader);
+   glUseProgram(triangle_shader.id);
 
-   glm::mat4 model   = glm::mat4(1.0f);
-   glm::mat4 proj    = glm::mat4(1.0f);
-   glm::mat4 view    = glm::mat4(1.0f);
-
-   model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-   model = glm::scale(model, glm::vec3(0.5, 0.5, 0.0));
-   proj  = glm::perspective(glm::radians(45.0f), (float)screen_w/(float)screen_h, 0.1f, 100.0f);
-   view  = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
-   // view  = glm::translate(view, glm::vec3(0.0f, 0.0f, -8.0f));
-
-   glUniformMatrix4fv(glGetUniformLocation(triangle_shader, "model"), 1, GL_FALSE, &model[0][0]);
-   glUniformMatrix4fv(glGetUniformLocation(triangle_shader, "view"),  1, GL_FALSE, &view[0][0]);
-   glUniformMatrix4fv(glGetUniformLocation(triangle_shader, "proj"),  1, GL_FALSE, &proj[0][0]);
+   gl_set_vp(&triangle_shader);
+   glm::mat4 model = glm::mat4(1.0f);
+   model           = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+   model           = glm::scale(model, glm::vec3(0.5, 0.5, 0.0));
+   glUniformMatrix4fv(glGetUniformLocation(triangle_shader.id, "model"), 1, GL_FALSE, &model[0][0]);
 
    glBindVertexArray(quad_instance.vao);
    glDrawElements(GL_TRIANGLES, index_count, GL_UNSIGNED_INT, 0);
    glDrawElementsInstanced(GL_TRIANGLES, index_count, GL_UNSIGNED_INT, 0, quad_instance.instance_count);
    glBindVertexArray(0);
 
-   gl_draw_model(&cube_gltf);
+   gl_draw_cube(&cube_shader);
+
+   // gl_draw_model(&cube_gltf);
    // for (u32 i = 0; i <= quad_count; ++i) {
    //    glBindVertexArray(quad[i].vao);
    //    glDrawElements(GL_TRIANGLES, index_count, GL_UNSIGNED_INT, 0);
@@ -711,6 +849,6 @@ gl_cleanup()
    //    glDeleteVertexArrays(1, &quad[i].vao);
    //    glDeleteBuffers(1, &quad[i].vbo);
    // }
-   glDeleteProgram(triangle_shader);
+   glDeleteProgram(triangle_shader.id);
    SDL_GL_DeleteContext(&gl_context);
 }

@@ -80,3 +80,13 @@ debug_draw_rectf32 (GameBackbuffer *buffer, V2 p0, V2 p1, f32 r, f32 g, f32 b, f
    }
 #endif
 }
+
+function void
+draw_cube (V3S position, V3 scale, V4 color)
+{
+   // gl_push_cube(&position, 1, color);
+   // @Incomplete: There is no command buffer yet so im drawing it here
+   // in order to get this to work. But there will be a push_render_command
+   // or bind vertex buffers and draw function.
+   // gl_draw_cube(&cube_shader);
+}

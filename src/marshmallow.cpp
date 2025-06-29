@@ -128,6 +128,14 @@ game_update_and_render (GameMemory *memory, GameInput *input, GameBackbuffer *ba
    // set_tilevalue(tilemap, 5,  4, 0,  boundry_tile_color);
    update_tile(tilemap, dest_tile.grid_pos, dest_tile.color);
 
+// const u32 cube_instance_count = 1;
+// V3S cube_positions[cube_instance_count] = {v3s(8.0f, 2.0f, -4.0f)};//,
+//                                            // v3s(4.0f, 2.2f, -4.5f),
+//                                            // v3s(12.0f, 2.2f, -4.5f)};
+
+   // draw_cube(cube_positions[0], v3(1.0, 1.0, 1.0f), BLUE);
+
+   // draw_cube_mesh_instanced(positions, scale, colors);
    // @Speed: We loop through the tilemap three times
    std::queue<Tile> check_path_queue;
    std::queue<Tile> display_path_queue;
